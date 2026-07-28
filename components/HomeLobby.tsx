@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import CreateCollabModal from "@/components/CreateCollabModal";
 import ProposalModal from "@/components/ProposalModal";
+import ReportModal from "@/components/ReportModal";
 import type { CollabPublic } from "@/lib/types";
 import styles from "@/app/page.module.css";
 
@@ -17,6 +18,7 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const collabs = initialCollabs;
 
   function handleCreated(id: string) {
@@ -104,13 +106,22 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
         </section>
       </main>
 
-      <button
-        type="button"
-        className={styles.proposalBtn}
-        onClick={() => setProposalOpen(true)}
-      >
-        Propostas de melhoria
-      </button>
+      <div className={styles.feedbackBtns}>
+        <button
+          type="button"
+          className={styles.proposalBtn}
+          onClick={() => setReportOpen(true)}
+        >
+          Encontrei um problema
+        </button>
+        <button
+          type="button"
+          className={styles.proposalBtn}
+          onClick={() => setProposalOpen(true)}
+        >
+          Propostas de melhoria
+        </button>
+      </div>
 
       {modalOpen && (
         <CreateCollabModal
@@ -120,6 +131,7 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
       )}
 
       {proposalOpen && <ProposalModal onClose={() => setProposalOpen(false)} />}
+      {reportOpen && <ReportModal onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
