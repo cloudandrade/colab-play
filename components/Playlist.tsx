@@ -66,7 +66,7 @@ export default function Playlist({
             {tracks.length === 0
               ? "Ainda vazia — busque e adicione a primeira faixa."
               : shuffle
-                ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · ordem aleatória`
+                ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · fila embaralhada (só nesta tela)`
                 : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} na fila coletiva.`}
           </p>
         </div>

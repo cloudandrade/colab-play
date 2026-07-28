@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import SearchBox from "@/components/SearchBox";
 import Playlist from "@/components/Playlist";
 import Player from "@/components/Player";
@@ -14,15 +14,33 @@ interface CollabRoomProps {
   initialCollab: CollabDetail;
 }
 
-function shuffleIndices(length: number, exclude?: number): number[] {
-  const indices = Array.from({ length }, (_, i) => i).filter((i) => i !== exclude);
-  for (let i = indices.length - 1; i > 0; i -= 1) {
+function shuffleIds(ids: string[]): string[] {
+  const next = [...ids];
+  for (let i = next.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
-    const tmp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = tmp;
+    const tmp = next[i];
+    next[i] = next[j];
+    next[j] = tmp;
   }
-  return indices;
+  return next;
+}
+
+function orderTracks(
+  source: PlaylistTrack[],
+  orderIds: string[] | null,
+): PlaylistTrack[] {
+  if (!orderIds) return source;
+  const byId = new Map(source.map((track) => [track.id, track]));
+  const ordered: PlaylistTrack[] = [];
+  for (const id of orderIds) {
+    const track = byId.get(id);
+    if (track) ordered.push(track);
+  }
+  // Faixas novas (ainda não no order) ficam no fim
+  for (const track of source) {
+    if (!orderIds.includes(track.id)) ordered.push(track);
+  }
+  return ordered;
 }
 
 export default function CollabRoom({ initialCollab }: CollabRoomProps) {
@@ -33,85 +51,60 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   const [shareHint, setShareHint] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
-  const [shuffleQueue, setShuffleQueue] = useState<number[]>([]);
-  const [playHistory, setPlayHistory] = useState<number[]>([]);
+  /** Ordem visual local (só no cliente). null = ordem original do servidor. */
+  const [shuffledIds, setShuffledIds] = useState<string[] | null>(null);
 
   const locked = collab.locked;
-  const tracks = collab.tracks;
+  const originalTracks = collab.tracks;
+  const tracks = useMemo(
+    () => (shuffle ? orderTracks(originalTracks, shuffledIds) : originalTracks),
+    [shuffle, shuffledIds, originalTracks],
+  );
   const safeIndex =
     tracks.length === 0 ? 0 : Math.min(currentIndex, tracks.length - 1);
-
-  const canGoPrev = shuffle ? playHistory.length > 1 : safeIndex > 0;
-  const canGoNext = shuffle
-    ? shuffleQueue.length > 0
-    : tracks.length > 0 && safeIndex < tracks.length - 1;
-
-  function enableShuffleFrom(index: number, length: number) {
-    setShuffleQueue(shuffleIndices(length, index));
-    setPlayHistory([index]);
-  }
+  const canGoPrev = safeIndex > 0;
+  const canGoNext = tracks.length > 0 && safeIndex < tracks.length - 1;
 
   function handleToggleShuffle() {
-    setShuffle((enabled) => {
-      const next = !enabled;
-      if (next && tracks.length > 0) {
-        enableShuffleFrom(safeIndex, tracks.length);
+    if (tracks.length === 0) return;
+
+    if (shuffle) {
+      const currentId = tracks[safeIndex]?.id;
+      setShuffle(false);
+      setShuffledIds(null);
+      if (currentId) {
+        const originalIndex = originalTracks.findIndex((t) => t.id === currentId);
+        setCurrentIndex(originalIndex >= 0 ? originalIndex : 0);
       } else {
-        setShuffleQueue([]);
-        setPlayHistory([]);
+        setCurrentIndex(0);
       }
-      return next;
-    });
+      return;
+    }
+
+    const nextOrder = shuffleIds(originalTracks.map((t) => t.id));
+    setShuffledIds(nextOrder);
+    setShuffle(true);
+    setCurrentIndex(0);
+    setShouldPlay(false);
   }
 
   const playNext = useCallback(() => {
     if (tracks.length === 0) return;
-
-    if (shuffle) {
-      setShuffleQueue((queue) => {
-        if (queue.length === 0) {
-          setShouldPlay(false);
-          return queue;
-        }
-        const [nextIndex, ...rest] = queue;
-        setPlayHistory((history) => [...history, nextIndex]);
-        setCurrentIndex(nextIndex);
-        setShouldPlay(true);
-        return rest;
-      });
-      return;
-    }
-
     if (safeIndex < tracks.length - 1) {
       setCurrentIndex(safeIndex + 1);
       setShouldPlay(true);
     } else {
       setShouldPlay(false);
     }
-  }, [shuffle, safeIndex, tracks.length]);
+  }, [safeIndex, tracks.length]);
 
   const playPrev = useCallback(() => {
     if (tracks.length === 0) return;
-
-    if (shuffle) {
-      setPlayHistory((history) => {
-        if (history.length <= 1) return history;
-        const nextHistory = history.slice(0, -1);
-        const previous = nextHistory[nextHistory.length - 1];
-        const current = history[history.length - 1];
-        setShuffleQueue((queue) => [current, ...queue.filter((i) => i !== previous)]);
-        setCurrentIndex(previous);
-        setShouldPlay(true);
-        return nextHistory;
-      });
-      return;
-    }
-
     if (safeIndex > 0) {
       setCurrentIndex(safeIndex - 1);
       setShouldPlay(true);
     }
-  }, [shuffle, safeIndex, tracks.length]);
+  }, [safeIndex, tracks.length]);
 
   async function handleShare() {
     const url =
@@ -163,20 +156,23 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     }
 
     const data = (await res.json()) as { collab: CollabDetail };
-    const wasEmpty = tracks.length === 0;
+    const wasEmpty = originalTracks.length === 0;
     setCollab(data.collab);
+
     if (wasEmpty) {
       setCurrentIndex(0);
-      if (shuffle) enableShuffleFrom(0, data.collab.tracks.length);
+      if (shuffle) {
+        setShuffledIds(data.collab.tracks.map((t) => t.id));
+      }
     } else if (shuffle) {
-      const newIndex = data.collab.tracks.length - 1;
-      setShuffleQueue((queue) => {
-        const insertAt = Math.floor(Math.random() * (queue.length + 1));
-        const next = [...queue];
-        next.splice(insertAt, 0, newIndex);
-        return next;
-      });
+      const newTrack = data.collab.tracks.find(
+        (t) => !originalTracks.some((o) => o.id === t.id),
+      );
+      if (newTrack) {
+        setShuffledIds((ids) => [...(ids ?? originalTracks.map((t) => t.id)), newTrack.id]);
+      }
     }
+
     setStatus(`Adicionada: ${track.title}`);
   }
 
@@ -192,58 +188,27 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     }
     const data = (await res.json()) as { collab: CollabDetail };
     const removedIndex = tracks.findIndex((t) => t.id === id);
+    const wasCurrent = removedIndex === safeIndex;
+
     setCollab(data.collab);
+    setShuffledIds((ids) => (ids ? ids.filter((trackId) => trackId !== id) : null));
 
     if (data.collab.tracks.length === 0) {
       setShouldPlay(false);
       setCurrentIndex(0);
-      setShuffleQueue([]);
-      setPlayHistory([]);
+      setShuffle(false);
+      setShuffledIds(null);
       return;
     }
 
     if (removedIndex < 0) return;
 
-    const remap = (i: number) => (i > removedIndex ? i - 1 : i);
-    const wasCurrent = removedIndex === safeIndex;
-
-    if (shuffle) {
-      const nextQueue = shuffleQueue
-        .filter((i) => i !== removedIndex)
-        .map(remap);
-      const nextHistory = playHistory
-        .filter((i) => i !== removedIndex)
-        .map(remap);
-
-      if (wasCurrent) {
-        if (nextQueue.length > 0) {
-          const [nextIndex, ...rest] = nextQueue;
-          setCurrentIndex(nextIndex);
-          setShuffleQueue(rest);
-          setPlayHistory([...nextHistory, nextIndex]);
-          setShouldPlay(true);
-        } else {
-          setCurrentIndex(0);
-          setShuffleQueue([]);
-          setPlayHistory([0]);
-          setShouldPlay(false);
-        }
-      } else {
-        setShuffleQueue(nextQueue);
-        setPlayHistory(nextHistory);
-        if (removedIndex < safeIndex) {
-          setCurrentIndex((i) => Math.max(0, i - 1));
-        }
-      }
-      return;
-    }
-
-    if (removedIndex < safeIndex) {
-      setCurrentIndex((i) => Math.max(0, i - 1));
-    } else if (wasCurrent) {
+    if (wasCurrent) {
       setCurrentIndex((i) =>
         Math.min(i, Math.max(0, data.collab.tracks.length - 1)),
       );
+    } else if (removedIndex < safeIndex) {
+      setCurrentIndex((i) => Math.max(0, i - 1));
     }
   }
 
@@ -252,9 +217,6 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     if (index < 0) return;
     setCurrentIndex(index);
     setShouldPlay(true);
-    if (shuffle) {
-      enableShuffleFrom(index, tracks.length);
-    }
   }
 
   function handlePlaylistPlay() {
