@@ -8,15 +8,35 @@ import {
   toDetail,
 } from "@/lib/collabs";
 import { getClientIp } from "@/lib/ip";
+import { rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  isValidCollabId,
+  MAX_ADMIN_CODE,
+  readJsonBody,
+  sanitizeText,
+} from "@/lib/security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
+  if (!isValidCollabId(id)) {
+    return NextResponse.json({ error: "Collab inválida." }, { status: 400 });
+  }
+
+  const ip = getClientIp(request);
+  const limited = rateLimit(`collab:get:${ip}`, { limit: 120, windowMs: 60_000 });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Muitas requisições." },
+      { status: 429, headers: rateLimitHeaders(limited, 120) },
+    );
+  }
+
   const collab = await getCollab(id);
   if (!collab) {
     return NextResponse.json({ error: "Collab não encontrada." }, { status: 404 });
@@ -26,9 +46,10 @@ export async function GET(
   const token = jar.get(accessCookieName(id))?.value;
   const allowed = hasAccess(collab, token);
 
-  return NextResponse.json({
-    collab: toDetail(collab, !allowed),
-  });
+  return NextResponse.json(
+    { collab: toDetail(collab, !allowed) },
+    { headers: rateLimitHeaders(limited, 120) },
+  );
 }
 
 export async function DELETE(
@@ -36,21 +57,40 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
+  if (!isValidCollabId(id)) {
+    return NextResponse.json({ error: "Collab inválida." }, { status: 400 });
+  }
+
+  const ip = getClientIp(request);
+  const limited = rateLimit(`collab:delete:${id}:${ip}`, {
+    limit: 10,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Muitas tentativas de exclusão." },
+      { status: 429, headers: rateLimitHeaders(limited, 10) },
+    );
+  }
 
   try {
-    const body = (await request.json().catch(() => ({}))) as {
+    const parsed = await readJsonBody<{
       adminCode?: string;
       confirmOwner?: boolean;
-    };
+    }>(request);
+    if (!parsed.ok) return parsed.response;
 
     const result = await deleteCollab(id, {
-      clientIp: getClientIp(request),
-      adminCode: body.adminCode,
-      confirmOwner: Boolean(body.confirmOwner),
+      clientIp: ip,
+      adminCode: sanitizeText(parsed.data.adminCode ?? "", MAX_ADMIN_CODE),
+      confirmOwner: Boolean(parsed.data.confirmOwner),
     });
 
     if ("deleted" in result) {
-      return NextResponse.json({ ok: true });
+      return NextResponse.json(
+        { ok: true },
+        { headers: rateLimitHeaders(limited, 10) },
+      );
     }
     if ("needsOwnerConfirm" in result) {
       return NextResponse.json({ needsOwnerConfirm: true }, { status: 409 });

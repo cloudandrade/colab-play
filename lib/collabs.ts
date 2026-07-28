@@ -11,8 +11,16 @@ import type {
   PlaylistTrack,
 } from "@/lib/types";
 
-const ACCESS_SECRET =
-  process.env.COLLAB_ACCESS_SECRET ?? "colab-play-dev-access-secret";
+function getAccessSecret(): string {
+  const secret = process.env.COLLAB_ACCESS_SECRET?.trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("COLLAB_ACCESS_SECRET é obrigatório em produção.");
+  }
+  return "colab-play-dev-access-secret";
+}
+
+export const MAX_TRACKS_PER_COLLAB = 200;
 
 type CollabRecord = {
   id: string;
@@ -82,7 +90,7 @@ function generateAdminCode(): string {
 
 export function makeAccessToken(collabId: string, passwordHash: string): string {
   return createHash("sha256")
-    .update(`${collabId}:${passwordHash}:${ACCESS_SECRET}`)
+    .update(`${collabId}:${passwordHash}:${getAccessSecret()}`)
     .digest("hex");
 }
 
@@ -153,12 +161,15 @@ export async function createCollab(input: {
   password?: string;
   creatorIp?: string | null;
 }): Promise<CreateCollabResult> {
-  const name = input.name.trim();
+  const name = input.name.trim().slice(0, 60);
   if (!name) {
     throw new Error("NOME_OBRIGATORIO");
   }
-  if (!input.isOpen && !input.password?.trim()) {
-    throw new Error("SENHA_OBRIGATORIA");
+  const password = input.password?.trim() ?? "";
+  if (!input.isOpen) {
+    if (!password) throw new Error("SENHA_OBRIGATORIA");
+    if (password.length < 3) throw new Error("SENHA_CURTA");
+    if (password.length > 128) throw new Error("SENHA_LONGA");
   }
 
   await connectDb();
@@ -168,7 +179,7 @@ export async function createCollab(input: {
     id: randomBytes(8).toString("hex"),
     name,
     isOpen: input.isOpen,
-    passwordHash: input.isOpen ? null : hashPassword(input.password!.trim()),
+    passwordHash: input.isOpen ? null : hashPassword(password),
     adminCodeHash: hashPassword(adminCode),
     creatorIp: input.creatorIp ?? null,
     createdAt: now,
@@ -200,7 +211,13 @@ export async function addTrackToCollab(
   const existing = await CollabModel.findOne({ id: collabId }).lean().exec();
   if (!existing) return null;
 
+  const trackCount = (existing.tracks ?? []).length;
   const alreadyThere = (existing.tracks ?? []).some((item) => item.id === track.id);
+
+  if (!alreadyThere && trackCount >= MAX_TRACKS_PER_COLLAB) {
+    throw new Error("LIMITE_FAIXAS");
+  }
+
   if (!alreadyThere) {
     await CollabModel.updateOne(
       { id: collabId },
