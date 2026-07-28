@@ -1,3 +1,4 @@
+import { youtubeArtworkUrl } from "./artwork";
 import type { SearchResult } from "./types";
 
 const PIPED_INSTANCES = (
@@ -28,10 +29,6 @@ function extractVideoId(urlOrId: string): string | null {
   if (/^[\w-]{11}$/.test(raw)) return raw;
   const match = raw.match(/[?&]v=([\w-]{11})/) || raw.match(/\/watch\?v=([\w-]{11})/);
   return match?.[1] ?? null;
-}
-
-function artworkFor(videoId: string): string {
-  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
 
 async function searchViaYouTubeDataApi(query: string, limit: number): Promise<SearchResult[]> {
@@ -69,10 +66,7 @@ async function searchViaYouTubeDataApi(query: string, limit: number): Promise<Se
       id,
       title: item.snippet?.title?.trim() || "Sem título",
       artist: item.snippet?.channelTitle?.trim() || "YouTube",
-      artworkUrl:
-        item.snippet?.thumbnails?.medium?.url ??
-        item.snippet?.thumbnails?.default?.url ??
-        artworkFor(id),
+      artworkUrl: youtubeArtworkUrl(id),
       duration: 0,
       source: "youtube",
     });
@@ -112,7 +106,7 @@ async function searchViaPiped(query: string, limit: number): Promise<SearchResul
           id,
           title: item.title?.trim() || "Sem título",
           artist: item.uploaderName?.trim() || "YouTube",
-          artworkUrl: artworkFor(id),
+          artworkUrl: youtubeArtworkUrl(id),
           duration: Number(item.duration) || 0,
           source: "youtube",
         });

@@ -7,7 +7,8 @@ import Playlist from "@/components/Playlist";
 import Player from "@/components/Player";
 import UnlockModal from "@/components/UnlockModal";
 import DeleteCollabModal from "@/components/DeleteCollabModal";
-import type { CollabDetail, PlaylistTrack, SearchResult } from "@/lib/types";
+import { ToastViewport, useToasts } from "@/components/Toast";
+import type { CollabDetail, PlaylistTrackView, SearchResult } from "@/lib/types";
 import styles from "@/app/page.module.css";
 
 interface CollabRoomProps {
@@ -26,17 +27,16 @@ function shuffleIds(ids: string[]): string[] {
 }
 
 function orderTracks(
-  source: PlaylistTrack[],
+  source: PlaylistTrackView[],
   orderIds: string[] | null,
-): PlaylistTrack[] {
+): PlaylistTrackView[] {
   if (!orderIds) return source;
   const byId = new Map(source.map((track) => [track.id, track]));
-  const ordered: PlaylistTrack[] = [];
+  const ordered: PlaylistTrackView[] = [];
   for (const id of orderIds) {
     const track = byId.get(id);
     if (track) ordered.push(track);
   }
-  // Faixas novas (ainda não no order) ficam no fim
   for (const track of source) {
     if (!orderIds.includes(track.id)) ordered.push(track);
   }
@@ -47,12 +47,12 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   const [collab, setCollab] = useState(initialCollab);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shouldPlay, setShouldPlay] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const [shareHint, setShareHint] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   /** Ordem visual local (só no cliente). null = ordem original do servidor. */
   const [shuffledIds, setShuffledIds] = useState<string[] | null>(null);
+  const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   const locked = collab.locked;
   const originalTracks = collab.tracks;
@@ -143,7 +143,6 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   }
 
   async function handleAdd(track: SearchResult) {
-    setStatus(null);
     const res = await fetch(`/api/collabs/${collab.id}/tracks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -151,7 +150,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     });
 
     if (!res.ok) {
-      setStatus("Não foi possível adicionar a faixa.");
+      pushToast("Não foi possível adicionar a faixa.", "error");
       return;
     }
 
@@ -173,25 +172,74 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
       }
     }
 
-    setStatus(`Adicionada: ${track.title}`);
+    pushToast(`Adicionada: ${track.title}`, "success");
   }
 
   async function handleRemove(id: string) {
-    setStatus(null);
     const res = await fetch(
       `/api/collabs/${collab.id}/tracks?trackId=${encodeURIComponent(id)}`,
       { method: "DELETE" },
     );
-    if (!res.ok) {
-      setStatus("Não foi possível remover a faixa.");
+    const data = (await res.json()) as {
+      collab?: CollabDetail;
+      removed?: boolean;
+      asOwner?: boolean;
+      voteCount?: number;
+      votesRequired?: number;
+      action?: "voted" | "unvoted";
+      error?: string;
+    };
+
+    if (!res.ok || !data.collab) {
+      pushToast(data.error || "Não foi possível remover a faixa.", "error");
       return;
     }
-    const data = (await res.json()) as { collab: CollabDetail };
+
+    const removedFromList = Boolean(data.removed);
     const removedIndex = tracks.findIndex((t) => t.id === id);
     const wasCurrent = removedIndex === safeIndex;
 
     setCollab(data.collab);
+
+    if (!removedFromList) {
+      const voteCount = data.voteCount ?? 0;
+      const hasVoted = data.action === "voted";
+      setCollab({
+        ...data.collab,
+        tracks: data.collab.tracks.map((track) =>
+          track.id === id
+            ? {
+                ...track,
+                removalVoteCount: voteCount,
+                hasVoted,
+              }
+            : track,
+        ),
+      });
+
+      if (data.action === "unvoted") {
+        pushToast(
+          voteCount > 0
+            ? `Pedido de remoção cancelado (${voteCount}/${data.votesRequired}).`
+            : "Pedido de remoção cancelado.",
+          "info",
+        );
+      } else {
+        pushToast(
+          `Voto registrado (${voteCount}/${data.votesRequired}). Falta mais um voto para remover.`,
+          "info",
+        );
+      }
+      return;
+    }
+
     setShuffledIds((ids) => (ids ? ids.filter((trackId) => trackId !== id) : null));
+    pushToast(
+      data.asOwner
+        ? "Faixa removida (dono)."
+        : "Faixa removida pelos votos da galera.",
+      "success",
+    );
 
     if (data.collab.tracks.length === 0) {
       setShouldPlay(false);
@@ -205,7 +253,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
 
     if (wasCurrent) {
       setCurrentIndex((i) =>
-        Math.min(i, Math.max(0, data.collab.tracks.length - 1)),
+        Math.min(i, Math.max(0, data.collab!.tracks.length - 1)),
       );
     } else if (removedIndex < safeIndex) {
       setCurrentIndex((i) => Math.max(0, i - 1));
@@ -213,7 +261,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   }
 
   function handleSelect(id: string) {
-    const index = tracks.findIndex((t: PlaylistTrack) => t.id === id);
+    const index = tracks.findIndex((t) => t.id === id);
     if (index < 0) return;
     setCurrentIndex(index);
     setShouldPlay(true);
@@ -301,7 +349,6 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
               {!locked && (
                 <div className={styles.search}>
                   <SearchBox onAdd={handleAdd} />
-                  {status && <p className={styles.status}>{status}</p>}
                 </div>
               )}
             </header>
@@ -313,6 +360,8 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   currentId={tracks[safeIndex]?.id ?? null}
                   isPlaying={shouldPlay}
                   shuffle={shuffle}
+                  isOwner={collab.isOwner}
+                  removalVotesRequired={collab.removalVotesRequired}
                   onToggleShuffle={handleToggleShuffle}
                   onSelect={handleSelect}
                   onRemove={handleRemove}
@@ -356,6 +405,8 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
           onClose={() => setDeleteOpen(false)}
         />
       )}
+
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

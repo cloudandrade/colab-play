@@ -37,7 +37,7 @@ export async function GET(
     );
   }
 
-  const collab = await getCollab(id);
+  const collab = await getCollab(id, { claimOwnerIp: ip });
   if (!collab) {
     return NextResponse.json({ error: "Collab não encontrada." }, { status: 404 });
   }
@@ -47,7 +47,7 @@ export async function GET(
   const allowed = hasAccess(collab, token);
 
   return NextResponse.json(
-    { collab: toDetail(collab, !allowed) },
+    { collab: toDetail(collab, !allowed, ip) },
     { headers: rateLimitHeaders(limited, 120) },
   );
 }

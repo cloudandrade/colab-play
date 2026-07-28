@@ -1,5 +1,7 @@
 export type TrackSource = "youtube" | "audius";
 
+export const REMOVAL_VOTES_REQUIRED = 2;
+
 export interface PlaylistTrack {
   id: string;
   title: string;
@@ -10,6 +12,17 @@ export interface PlaylistTrack {
   streamUrl: string;
   addedAt: string;
   addedBy?: string;
+}
+
+/** Track as sent to the client (includes vote state). */
+export interface PlaylistTrackView extends PlaylistTrack {
+  removalVoteCount: number;
+  hasVoted: boolean;
+}
+
+export interface RemovalVote {
+  trackId: string;
+  voterIps: string[];
 }
 
 export interface SearchResult {
@@ -33,6 +46,7 @@ export interface Collab {
   createdAt: string;
   updatedAt: string;
   tracks: PlaylistTrack[];
+  removalVotes: RemovalVote[];
 }
 
 export interface CollabPublic {
@@ -50,9 +64,13 @@ export interface CollabDetail {
   isOpen: boolean;
   createdAt: string;
   updatedAt: string;
-  tracks: PlaylistTrack[];
+  tracks: PlaylistTrackView[];
   /** True when closed and the request is not unlocked yet. */
   locked: boolean;
+  /** True when the request IP matches the collab creator. */
+  isOwner: boolean;
+  /** Votes needed for non-owners to remove a track. */
+  removalVotesRequired: number;
 }
 
 export interface CollabsStore {
@@ -68,4 +86,20 @@ export type DeleteCollabResult =
   | { deleted: true }
   | { needsOwnerConfirm: true }
   | { needsAdminCode: true }
+  | { error: string; status: number };
+
+export type RemoveTrackResult =
+  | {
+      collab: Collab;
+      removed: true;
+      asOwner: boolean;
+    }
+  | {
+      collab: Collab;
+      removed: false;
+      voteCount: number;
+      votesRequired: number;
+      /** voted = novo pedido; unvoted = cancelou o próprio voto */
+      action: "voted" | "unvoted";
+    }
   | { error: string; status: number };

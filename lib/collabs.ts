@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { resolveStoredArtworkUrl } from "@/lib/artwork";
 import { connectDb } from "@/lib/db";
-import { sameIp } from "@/lib/ip";
+import { hasCreatorIp, normalizeIp, sameIp } from "@/lib/ip";
 import { CollabModel } from "@/lib/models/Collab";
 import type {
   Collab,
@@ -9,7 +10,11 @@ import type {
   CreateCollabResult,
   DeleteCollabResult,
   PlaylistTrack,
+  PlaylistTrackView,
+  RemovalVote,
+  RemoveTrackResult,
 } from "@/lib/types";
+import { REMOVAL_VOTES_REQUIRED } from "@/lib/types";
 
 function getAccessSecret(): string {
   const secret = process.env.COLLAB_ACCESS_SECRET?.trim();
@@ -21,6 +26,7 @@ function getAccessSecret(): string {
 }
 
 export const MAX_TRACKS_PER_COLLAB = 200;
+export { REMOVAL_VOTES_REQUIRED };
 
 type CollabRecord = {
   id: string;
@@ -42,6 +48,10 @@ type CollabRecord = {
     addedAt: string;
     addedBy?: string | null;
   }>;
+  removalVotes?: Array<{
+    trackId: string;
+    voterIps?: string[];
+  }>;
 };
 
 function toCollab(doc: CollabRecord): Collab {
@@ -54,16 +64,27 @@ function toCollab(doc: CollabRecord): Collab {
     creatorIp: doc.creatorIp ?? null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
-    tracks: (doc.tracks ?? []).map((track) => ({
-      id: track.id,
-      title: track.title,
-      artist: track.artist,
-      artworkUrl: track.artworkUrl ?? null,
-      duration: track.duration ?? 0,
-      source: track.source === "audius" ? "audius" : "youtube",
-      streamUrl: track.streamUrl,
-      addedAt: track.addedAt,
-      ...(track.addedBy ? { addedBy: track.addedBy } : {}),
+    tracks: (doc.tracks ?? []).map((track) => {
+      const source = track.source === "audius" ? "audius" : "youtube";
+      return {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artworkUrl: resolveStoredArtworkUrl(
+          track.id,
+          source,
+          track.artworkUrl ?? null,
+        ),
+        duration: track.duration ?? 0,
+        source,
+        streamUrl: track.streamUrl,
+        addedAt: track.addedAt,
+        ...(track.addedBy ? { addedBy: track.addedBy } : {}),
+      };
+    }),
+    removalVotes: (doc.removalVotes ?? []).map((vote) => ({
+      trackId: vote.trackId,
+      voterIps: [...(vote.voterIps ?? [])],
     })),
   };
 }
@@ -109,7 +130,29 @@ export function toPublic(collab: Collab): CollabPublic {
   };
 }
 
-export function toDetail(collab: Collab, locked: boolean): CollabDetail {
+export function toDetail(
+  collab: Collab,
+  locked: boolean,
+  clientIp?: string | null,
+): CollabDetail {
+  const isOwner = sameIp(collab.creatorIp, clientIp);
+  const voteMap = new Map(
+    (collab.removalVotes ?? []).map((vote) => [vote.trackId, vote.voterIps]),
+  );
+
+  const tracks: PlaylistTrackView[] = locked
+    ? []
+    : collab.tracks.map((track) => {
+        const voters = voteMap.get(track.id) ?? [];
+        return {
+          ...track,
+          removalVoteCount: voters.length,
+          hasVoted: clientIp
+            ? voters.some((ip) => sameIp(ip, clientIp))
+            : false,
+        };
+      });
+
   return {
     id: collab.id,
     name: collab.name,
@@ -117,7 +160,9 @@ export function toDetail(collab: Collab, locked: boolean): CollabDetail {
     createdAt: collab.createdAt,
     updatedAt: collab.updatedAt,
     locked,
-    tracks: locked ? [] : collab.tracks,
+    isOwner,
+    removalVotesRequired: REMOVAL_VOTES_REQUIRED,
+    tracks,
   };
 }
 
@@ -148,11 +193,44 @@ export async function listCollabs(): Promise<CollabPublic[]> {
   return docs.map((doc) => toPublic(toCollab(doc as CollabRecord)));
 }
 
-export async function getCollab(id: string): Promise<Collab | null> {
+export async function getCollab(
+  id: string,
+  options?: { claimOwnerIp?: string | null },
+): Promise<Collab | null> {
   await connectDb();
   const doc = await CollabModel.findOne({ id }).lean().exec();
   if (!doc) return null;
-  return toCollab(doc as CollabRecord);
+  const collab = toCollab(doc as CollabRecord);
+
+  // Collabs antigas sem creatorIp: o primeiro acesso válido assume a posse.
+  const claimIp = options?.claimOwnerIp
+    ? normalizeIp(options.claimOwnerIp)
+    : null;
+  if (!hasCreatorIp(collab.creatorIp) && claimIp && claimIp !== "unknown") {
+    const claimed = await CollabModel.collection.updateOne(
+      {
+        id,
+        $or: [
+          { creatorIp: null },
+          { creatorIp: { $exists: false } },
+          { creatorIp: "" },
+          { creatorIp: "unknown" },
+        ],
+      },
+      { $set: { creatorIp: claimIp } },
+    );
+    if (claimed.modifiedCount > 0 || claimed.upsertedCount > 0) {
+      collab.creatorIp = claimIp;
+    } else {
+      // Outro processo pode ter reivindicado no meio tempo
+      const fresh = await CollabModel.findOne({ id }).lean().exec();
+      if (fresh) {
+        return toCollab(fresh as CollabRecord);
+      }
+    }
+  }
+
+  return collab;
 }
 
 export async function createCollab(input: {
@@ -181,10 +259,11 @@ export async function createCollab(input: {
     isOpen: input.isOpen,
     passwordHash: input.isOpen ? null : hashPassword(password),
     adminCodeHash: hashPassword(adminCode),
-    creatorIp: input.creatorIp ?? null,
+    creatorIp: input.creatorIp ? normalizeIp(input.creatorIp) : null,
     createdAt: now,
     updatedAt: now,
     tracks: [],
+    removalVotes: [],
   };
 
   await CollabModel.create(collab);
@@ -239,18 +318,123 @@ export async function addTrackToCollab(
 export async function removeTrackFromCollab(
   collabId: string,
   trackId: string,
-): Promise<Collab | null> {
+  clientIp: string,
+): Promise<RemoveTrackResult> {
+  const collab = await getCollab(collabId, { claimOwnerIp: clientIp });
+  if (!collab) {
+    return { error: "Collab não encontrada.", status: 404 };
+  }
+
+  const exists = collab.tracks.some((track) => track.id === trackId);
+  if (!exists) {
+    return { error: "Faixa não encontrada.", status: 404 };
+  }
+
+  const owner = sameIp(collab.creatorIp, clientIp);
+
+  if (owner) {
+    await connectDb();
+    await CollabModel.updateOne(
+      { id: collabId },
+      {
+        $pull: {
+          tracks: { id: trackId },
+          removalVotes: { trackId },
+        },
+        $set: { updatedAt: new Date().toISOString() },
+      },
+    ).exec();
+    const updated = await getCollab(collabId);
+    if (!updated) {
+      return { error: "Collab não encontrada.", status: 404 };
+    }
+    return { collab: updated, removed: true, asOwner: true };
+  }
+
+  if (!clientIp || clientIp === "unknown") {
+    return {
+      error: "Não foi possível identificar seu IP para votar.",
+      status: 400,
+    };
+  }
+
+  const votes: RemovalVote[] = (collab.removalVotes ?? []).map((vote) => ({
+    trackId: vote.trackId,
+    voterIps: [...vote.voterIps],
+  }));
+  let entry = votes.find((vote) => vote.trackId === trackId);
+  if (!entry) {
+    entry = { trackId, voterIps: [] };
+    votes.push(entry);
+  }
+
+  const alreadyVoted = entry.voterIps.some((ip) => sameIp(ip, clientIp));
+  let action: "voted" | "unvoted";
+
+  if (alreadyVoted) {
+    entry.voterIps = entry.voterIps.filter((ip) => !sameIp(ip, clientIp));
+    action = "unvoted";
+  } else {
+    entry.voterIps.push(clientIp);
+    action = "voted";
+  }
+
+  const voteCount = entry.voterIps.length;
+  const now = new Date().toISOString();
+  const nextVotes =
+    voteCount === 0
+      ? votes.filter((vote) => vote.trackId !== trackId)
+      : votes;
+
+  if (voteCount >= REMOVAL_VOTES_REQUIRED) {
+    await connectDb();
+    await CollabModel.collection.updateOne(
+      { id: collabId },
+      {
+        $pull: {
+          tracks: { id: trackId },
+          removalVotes: { trackId },
+        },
+        $set: { updatedAt: now },
+      } as Record<string, unknown>,
+    );
+    const updated = await getCollab(collabId);
+    if (!updated) {
+      return { error: "Collab não encontrada.", status: 404 };
+    }
+    return { collab: updated, removed: true, asOwner: false };
+  }
+
   await connectDb();
-  const result = await CollabModel.updateOne(
+  // updateOne via collection evita strip de campos por schema cacheado no HMR
+  await CollabModel.collection.updateOne(
     { id: collabId },
     {
-      $pull: { tracks: { id: trackId } },
-      $set: { updatedAt: new Date().toISOString() },
+      $set: {
+        removalVotes: nextVotes,
+        updatedAt: now,
+      },
     },
-  ).exec();
+  );
 
-  if (result.matchedCount === 0) return null;
-  return getCollab(collabId);
+  const updated = await getCollab(collabId);
+  if (!updated) {
+    return { error: "Collab não encontrada.", status: 404 };
+  }
+
+  // Garante contagem correta na resposta mesmo se a leitura vier defasada
+  const withVotes: Collab = {
+    ...updated,
+    removalVotes: nextVotes,
+  };
+
+  return {
+    collab: withVotes,
+    removed: false,
+    voteCount,
+    votesRequired: REMOVAL_VOTES_REQUIRED,
+    action,
+  };
 }
 
 export async function deleteCollab(

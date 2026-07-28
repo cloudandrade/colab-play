@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import type { PlaylistTrack } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import { artworkProxyPath } from "@/lib/artwork";
+import type { PlaylistTrackView } from "@/lib/types";
 import styles from "./Playlist.module.css";
 
 interface PlaylistProps {
-  tracks: PlaylistTrack[];
+  tracks: PlaylistTrackView[];
   currentId: string | null;
   isPlaying: boolean;
   shuffle: boolean;
+  isOwner: boolean;
+  removalVotesRequired: number;
   onToggleShuffle: () => void;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
@@ -23,24 +26,30 @@ function formatDuration(seconds: number): string {
 }
 
 function TrackArt({
-  src,
   trackId,
   title,
+  source,
 }: {
-  src: string | null;
   trackId: string;
   title: string;
+  source: PlaylistTrackView["source"];
 }) {
+  const imgRef = useRef<HTMLImageElement>(null);
   const [loaded, setLoaded] = useState(false);
-  // Capas do YouTube: URL canônica (evita hosts ggpht/etc. bloqueados pelo CSP)
-  const resolvedSrc =
-    src && /^https:\/\/(i\d*\.)?ytimg\.com\//i.test(src)
-      ? src
-      : trackId
-        ? `https://i.ytimg.com/vi/${encodeURIComponent(trackId)}/hqdefault.jpg`
-        : src;
+  const [failed, setFailed] = useState(false);
+  const src =
+    source === "youtube" ? artworkProxyPath(trackId) : null;
 
-  if (!resolvedSrc) {
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, [src]);
+
+  if (!src || failed) {
     return <span className={styles.artFallback} aria-hidden />;
   }
 
@@ -49,15 +58,18 @@ function TrackArt({
       {!loaded && <span className={styles.artSkeleton} aria-hidden />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={resolvedSrc}
+        ref={imgRef}
+        src={src}
         alt=""
         className={`${styles.art} ${loaded ? styles.artVisible : styles.artHidden}`}
         width={48}
         height={48}
-        referrerPolicy="no-referrer"
         decoding="async"
         onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
+        onError={() => {
+          setFailed(true);
+          setLoaded(true);
+        }}
       />
       <span className={styles.srOnly}>{title}</span>
     </span>
@@ -69,6 +81,8 @@ export default function Playlist({
   currentId,
   isPlaying,
   shuffle,
+  isOwner,
+  removalVotesRequired,
   onToggleShuffle,
   onSelect,
   onRemove,
@@ -84,7 +98,9 @@ export default function Playlist({
               ? "Ainda vazia — busque e adicione a primeira faixa."
               : shuffle
                 ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · fila embaralhada (só nesta tela)`
-                : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} na fila coletiva.`}
+                : isOwner
+                  ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · você é o dono (remoção direta)`
+                  : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · remoção por ${removalVotesRequired} votos`}
           </p>
         </div>
 
@@ -132,6 +148,15 @@ export default function Playlist({
         <ol className={styles.list}>
           {tracks.map((track, index) => {
             const active = track.id === currentId;
+            const votes = track.removalVoteCount;
+            const voteLabel = isOwner
+              ? "Remover (dono)"
+              : track.hasVoted
+                ? `Cancelar pedido ${votes}/${removalVotesRequired}`
+                : votes > 0
+                  ? `Votar remoção ${votes}/${removalVotesRequired}`
+                  : `Pedir remoção (0/${removalVotesRequired})`;
+
             return (
               <li
                 key={`${track.id}-${track.addedAt}`}
@@ -145,9 +170,9 @@ export default function Playlist({
                 >
                   <span className={styles.index}>{index + 1}</span>
                   <TrackArt
-                    src={track.artworkUrl}
                     trackId={track.id}
                     title={track.title}
+                    source={track.source}
                   />
                   <span className={styles.meta}>
                     <span className={styles.title}>{track.title}</span>
@@ -160,25 +185,38 @@ export default function Playlist({
                 </button>
                 <button
                   type="button"
-                  className={styles.remove}
+                  className={`${styles.remove} ${
+                    !isOwner && votes > 0 ? styles.voteRemove : ""
+                  } ${track.hasVoted ? styles.voted : ""}`}
                   onClick={() => onRemove(track.id)}
-                  aria-label={`Remover ${track.title}`}
-                  title="Remover"
+                  aria-label={voteLabel}
+                  title={voteLabel}
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="18"
-                    height="18"
-                    aria-hidden
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
+                  <span
+                    className={
+                      !isOwner && votes > 0 ? styles.removeStack : undefined
+                    }
                   >
-                    <path d="M4 7h16" strokeLinecap="round" />
-                    <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                    <path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-                    <path d="M10 11v6M14 11v6" strokeLinecap="round" />
-                  </svg>
+                    <svg
+                      viewBox="0 0 24 24"
+                      width={!isOwner && votes > 0 ? 14 : 18}
+                      height={!isOwner && votes > 0 ? 14 : 18}
+                      aria-hidden
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M4 7h16" strokeLinecap="round" />
+                      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      <path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+                      <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+                    </svg>
+                    {!isOwner && votes > 0 && (
+                      <span className={styles.voteBadge}>
+                        {votes}/{removalVotesRequired}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </li>
             );

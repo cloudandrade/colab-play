@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { resolveStoredArtworkUrl } from "@/lib/artwork";
 import {
   accessCookieName,
   addTrackToCollab,
@@ -24,8 +25,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function requireAccess(id: string) {
-  const collab = await getCollab(id);
+async function requireAccess(id: string, clientIp?: string) {
+  const collab = await getCollab(id, { claimOwnerIp: clientIp });
   if (!collab) {
     return {
       error: NextResponse.json({ error: "Collab não encontrada." }, { status: 404 }),
@@ -62,7 +63,7 @@ export async function POST(
     );
   }
 
-  const access = await requireAccess(id);
+  const access = await requireAccess(id, ip);
   if ("error" in access && access.error) return access.error;
 
   try {
@@ -89,7 +90,8 @@ export async function POST(
     const artworkRaw =
       typeof body.artworkUrl === "string" ? body.artworkUrl.trim() : null;
     const artworkUrl =
-      artworkRaw && isSafeHttpsUrl(artworkRaw) ? artworkRaw : null;
+      resolveStoredArtworkUrl(trackId, source, artworkRaw) ??
+      (artworkRaw && isSafeHttpsUrl(artworkRaw) ? artworkRaw : null);
 
     const track: PlaylistTrack = {
       id: trackId,
@@ -114,7 +116,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { collab: toDetail(updated, false) },
+      { collab: toDetail(updated, false, ip) },
       { status: 201, headers: rateLimitHeaders(limited, 40) },
     );
   } catch (error) {
@@ -149,7 +151,7 @@ export async function DELETE(
     );
   }
 
-  const access = await requireAccess(id);
+  const access = await requireAccess(id, ip);
   if ("error" in access && access.error) return access.error;
 
   const trackId = new URL(request.url).searchParams.get("trackId")?.trim() ?? "";
@@ -160,13 +162,26 @@ export async function DELETE(
     );
   }
 
-  const updated = await removeTrackFromCollab(id, trackId);
-  if (!updated) {
-    return NextResponse.json({ error: "Collab não encontrada." }, { status: 404 });
+  const result = await removeTrackFromCollab(id, trackId, ip);
+  if ("error" in result) {
+    return NextResponse.json(
+      { error: result.error },
+      { status: result.status, headers: rateLimitHeaders(limited, 60) },
+    );
   }
 
   return NextResponse.json(
-    { collab: toDetail(updated, false) },
+    {
+      collab: toDetail(result.collab, false, ip),
+      removed: result.removed,
+      ...(result.removed
+        ? { asOwner: result.asOwner }
+        : {
+            voteCount: result.voteCount,
+            votesRequired: result.votesRequired,
+            action: result.action,
+          }),
+    },
     { headers: rateLimitHeaders(limited, 60) },
   );
 }

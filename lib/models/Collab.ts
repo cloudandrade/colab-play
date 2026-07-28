@@ -1,4 +1,8 @@
-import { Schema, models, model, type InferSchemaType, type Model } from "mongoose";
+import mongoose, {
+  Schema,
+  type InferSchemaType,
+  type Model,
+} from "mongoose";
 
 const trackSchema = new Schema(
   {
@@ -15,6 +19,14 @@ const trackSchema = new Schema(
   { _id: false },
 );
 
+const removalVoteSchema = new Schema(
+  {
+    trackId: { type: String, required: true },
+    voterIps: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
 const collabSchema = new Schema(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -26,15 +38,23 @@ const collabSchema = new Schema(
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
     tracks: { type: [trackSchema], default: [] },
+    removalVotes: { type: [removalVoteSchema], default: [] },
   },
   {
     collection: "collabs",
     versionKey: false,
+    strict: true,
   },
 );
 
 export type CollabDocument = InferSchemaType<typeof collabSchema>;
 
-export const CollabModel: Model<CollabDocument> =
-  (models.Collab as Model<CollabDocument>) ||
-  model<CollabDocument>("Collab", collabSchema);
+// Next.js HMR reusa models.Collab com schema antigo — recria para aplicar campos novos.
+if (mongoose.models.Collab) {
+  delete mongoose.models.Collab;
+}
+
+export const CollabModel: Model<CollabDocument> = mongoose.model<CollabDocument>(
+  "Collab",
+  collabSchema,
+);

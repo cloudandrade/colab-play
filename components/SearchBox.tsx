@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { artworkProxyPath } from "@/lib/artwork";
 import type { SearchResult } from "@/lib/types";
 import styles from "./SearchBox.module.css";
 
@@ -141,10 +142,14 @@ export default function SearchBox({ onAdd, disabled }: SearchBoxProps) {
                 disabled={addingId === track.id}
                 onClick={() => handleAdd(track)}
               >
-                {track.artworkUrl ? (
+                {track.source === "youtube" || track.artworkUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={track.artworkUrl}
+                    src={
+                      track.source === "youtube"
+                        ? artworkProxyPath(track.id)
+                        : (track.artworkUrl as string)
+                    }
                     alt=""
                     className={styles.art}
                     width={44}
