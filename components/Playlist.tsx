@@ -22,10 +22,25 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function TrackArt({ src, title }: { src: string | null; title: string }) {
+function TrackArt({
+  src,
+  trackId,
+  title,
+}: {
+  src: string | null;
+  trackId: string;
+  title: string;
+}) {
   const [loaded, setLoaded] = useState(false);
+  // Capas do YouTube: URL canônica (evita hosts ggpht/etc. bloqueados pelo CSP)
+  const resolvedSrc =
+    src && /^https:\/\/(i\d*\.)?ytimg\.com\//i.test(src)
+      ? src
+      : trackId
+        ? `https://i.ytimg.com/vi/${encodeURIComponent(trackId)}/hqdefault.jpg`
+        : src;
 
-  if (!src) {
+  if (!resolvedSrc) {
     return <span className={styles.artFallback} aria-hidden />;
   }
 
@@ -34,11 +49,13 @@ function TrackArt({ src, title }: { src: string | null; title: string }) {
       {!loaded && <span className={styles.artSkeleton} aria-hidden />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={resolvedSrc}
         alt=""
         className={`${styles.art} ${loaded ? styles.artVisible : styles.artHidden}`}
         width={48}
         height={48}
+        referrerPolicy="no-referrer"
+        decoding="async"
         onLoad={() => setLoaded(true)}
         onError={() => setLoaded(true)}
       />
@@ -127,7 +144,11 @@ export default function Playlist({
                   aria-current={active ? "true" : undefined}
                 >
                   <span className={styles.index}>{index + 1}</span>
-                  <TrackArt src={track.artworkUrl} title={track.title} />
+                  <TrackArt
+                    src={track.artworkUrl}
+                    trackId={track.id}
+                    title={track.title}
+                  />
                   <span className={styles.meta}>
                     <span className={styles.title}>{track.title}</span>
                     <span className={styles.artist}>

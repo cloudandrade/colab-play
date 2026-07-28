@@ -64,7 +64,9 @@ export function isSafeHttpsUrl(value: string | null | undefined): boolean {
     const host = url.hostname.toLowerCase();
     return (
       host === "i.ytimg.com" ||
+      /^i\d*\.ytimg\.com$/.test(host) ||
       host === "img.youtube.com" ||
+      host.endsWith(".ytimg.com") ||
       host.endsWith(".googleusercontent.com") ||
       host.endsWith(".ggpht.com")
     );
