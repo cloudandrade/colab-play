@@ -1,0 +1,99 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #08150f 62%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.dialog {
+  width: min(100%, 28rem);
+  padding: 1.35rem;
+  border-radius: 0.7rem;
+  background: #fff;
+  border: 2px solid color-mix(in srgb, #9b2c2c 25%, transparent);
+  color: var(--ink);
+}
+
+.header h2 {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.header p {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.form {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field span {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.field input {
+  border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.8rem 0.9rem;
+  font: 700 1rem/1.2 var(--font-display);
+  letter-spacing: 0.06em;
+  outline: none;
+}
+
+.field input:focus {
+  border-color: #9b2c2c;
+}
+
+.error {
+  color: #9b2c2c;
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.ghost,
+.danger {
+  border: 0;
+  border-radius: 0.35rem;
+  padding: 0.75rem 1rem;
+  font: 700 0.9rem/1 var(--font-body);
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.danger {
+  background: #9b2c2c;
+  color: #fff;
+}
+
+.danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

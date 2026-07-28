@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CoLab Play
 
-## Getting Started
+Playlist colaborativa: crie collabs, busque músicas e toque a fila em sequência.
 
-First, run the development server:
+## Stack
+
+- **Next.js** (App Router) + TypeScript
+- **MongoDB** (Mongoose) — collabs, faixas e senha hasheada
+- **YouTube** — busca (Piped) + player IFrame
+
+## Banco de dados
+
+Estrutura na collection `collabs`:
+
+- `id`, `name`, `isOpen`
+- `passwordHash` (scrypt, só em collabs fechadas)
+- `createdAt`, `updatedAt`
+- `tracks[]` embutidas (`id` do YouTube, título, artista, capa, duração, etc.)
+
+### Subir Mongo local
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:up
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Confira `MONGODB_URI` no `.env`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/colabplay
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Como rodar
 
-## Learn More
+```bash
+npm install
+npm run db:up
+cp .env.example .env   # se ainda não tiver
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Abra [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Fluxo
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Na home, veja as collabs ou clique em **Criar collab**.
+2. Informe o nome; se for privada, defina a senha.
+3. Collab pública: entra e adiciona músicas livremente.
+4. Collab privada: senha libera a sala (cookie httpOnly).
 
-## Deploy on Vercel
+## API
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Rota | Método | Descrição |
+|------|--------|-----------|
+| `/api/collabs` | GET/POST | Lista / cria collabs |
+| `/api/collabs/[id]` | GET | Detalhe (tracks só com acesso) |
+| `/api/collabs/[id]/unlock` | POST | Desbloqueia collab fechada |
+| `/api/collabs/[id]/tracks` | POST/DELETE | Adiciona / remove faixa |
+| `/api/search?q=` | GET | Autocomplete YouTube |

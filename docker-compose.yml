@@ -1,0 +1,11 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: colabplay-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - colabplay_mongo_data:/data/db
+
+volumes:
+  colabplay_mongo_data:
