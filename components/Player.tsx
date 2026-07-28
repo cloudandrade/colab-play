@@ -7,9 +7,14 @@ import styles from "./Player.module.css";
 interface PlayerProps {
   tracks: PlaylistTrack[];
   currentIndex: number;
-  onIndexChange: (index: number) => void;
   shouldPlay: boolean;
+  shuffle: boolean;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onShouldPlayChange: (playing: boolean) => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onToggleShuffle: () => void;
 }
 
 interface YtPlayer {
@@ -82,6 +87,18 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function ShuffleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M16 3h5v5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 20 21 3" strokeLinecap="round" />
+      <path d="M21 16v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 15l6 6" strokeLinecap="round" />
+      <path d="M4 4l5 5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function loadYouTubeApi(): Promise<YtNamespace> {
   if (window.YT?.Player) {
     return Promise.resolve(window.YT);
@@ -106,18 +123,22 @@ function loadYouTubeApi(): Promise<YtNamespace> {
 export default function Player({
   tracks,
   currentIndex,
-  onIndexChange,
   shouldPlay,
+  shuffle,
+  canGoPrev,
+  canGoNext,
   onShouldPlayChange,
+  onNext,
+  onPrev,
+  onToggleShuffle,
 }: PlayerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YtPlayer | null>(null);
   const readyRef = useRef(false);
-  const indexRef = useRef(currentIndex);
   const tracksRef = useRef(tracks);
-  const onIndexChangeRef = useRef(onIndexChange);
   const shouldPlayRef = useRef(shouldPlay);
   const onShouldPlayChangeRef = useRef(onShouldPlayChange);
+  const onNextRef = useRef(onNext);
   const lastCuedIdRef = useRef<string | null>(null);
   const volumeRef = useRef(80);
 
@@ -136,12 +157,11 @@ export default function Player({
   const trackDuration = current?.duration ?? 0;
 
   useEffect(() => {
-    indexRef.current = currentIndex;
     tracksRef.current = tracks;
-    onIndexChangeRef.current = onIndexChange;
     shouldPlayRef.current = shouldPlay;
     onShouldPlayChangeRef.current = onShouldPlayChange;
-  }, [currentIndex, tracks, onIndexChange, shouldPlay, onShouldPlayChange]);
+    onNextRef.current = onNext;
+  }, [tracks, shouldPlay, onShouldPlayChange, onNext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,16 +193,7 @@ export default function Player({
             const YTns = window.YT;
             if (!YTns) return;
             if (event.data === YTns.PlayerState.ENDED) {
-              const idx = indexRef.current;
-              const list = tracksRef.current;
-              if (idx < list.length - 1) {
-                shouldPlayRef.current = true;
-                onShouldPlayChangeRef.current(true);
-                onIndexChangeRef.current(idx + 1);
-              } else {
-                setPlaying(false);
-                onShouldPlayChangeRef.current(false);
-              }
+              onNextRef.current();
             } else if (event.data === YTns.PlayerState.PLAYING) {
               setPlaying(true);
               setMediaLoading(false);
@@ -302,14 +313,6 @@ export default function Player({
     }
   }
 
-  function goPrev() {
-    if (currentIndex > 0) onIndexChange(currentIndex - 1);
-  }
-
-  function goNext() {
-    if (currentIndex < tracks.length - 1) onIndexChange(currentIndex + 1);
-  }
-
   function onSeek(value: number) {
     const player = playerRef.current;
     if (!player) return;
@@ -352,11 +355,23 @@ export default function Player({
 
       <div className={`${styles.controls} ${!current ? styles.controlsDisabled : ""}`}>
         <div className={styles.transport}>
+          <button
+            type="button"
+            className={`${styles.shuffleBtn} ${shuffle ? styles.shuffleOn : ""}`}
+            onClick={onToggleShuffle}
+            disabled={!current}
+            aria-pressed={shuffle}
+            aria-label={shuffle ? "Desativar ordem aleatória" : "Ativar ordem aleatória"}
+            title={shuffle ? "Ordem aleatória ligada" : "Ordem aleatória"}
+          >
+            <ShuffleIcon />
+          </button>
+
           <div className={styles.buttons}>
             <button
               type="button"
-              onClick={goPrev}
-              disabled={!current || currentIndex <= 0}
+              onClick={onPrev}
+              disabled={!current || !canGoPrev}
               aria-label="Anterior"
             >
               ‹
@@ -372,8 +387,8 @@ export default function Player({
             </button>
             <button
               type="button"
-              onClick={goNext}
-              disabled={!current || currentIndex >= tracks.length - 1}
+              onClick={onNext}
+              disabled={!current || !canGoNext}
               aria-label="Próxima"
             >
               ›

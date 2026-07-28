@@ -162,6 +162,38 @@
   gap: 0.5rem;
 }
 
+.shuffleBtn {
+  grid-column: 1;
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: background 160ms ease, opacity 160ms ease, color 160ms ease;
+}
+
+.shuffleBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, #fff 12%, transparent);
+  opacity: 1;
+}
+
+.shuffleBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.shuffleOn {
+  opacity: 1;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .buttons button {
   border: 0;
   background: transparent;

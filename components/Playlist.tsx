@@ -8,6 +8,8 @@ interface PlaylistProps {
   tracks: PlaylistTrack[];
   currentId: string | null;
   isPlaying: boolean;
+  shuffle: boolean;
+  onToggleShuffle: () => void;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onPlay: () => void;
@@ -49,6 +51,8 @@ export default function Playlist({
   tracks,
   currentId,
   isPlaying,
+  shuffle,
+  onToggleShuffle,
   onSelect,
   onRemove,
   onPlay,
@@ -61,20 +65,50 @@ export default function Playlist({
           <p>
             {tracks.length === 0
               ? "Ainda vazia — busque e adicione a primeira faixa."
-              : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} na fila coletiva.`}
+              : shuffle
+                ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · ordem aleatória`
+                : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} na fila coletiva.`}
           </p>
         </div>
 
-        <button
-          type="button"
-          className={styles.playBtn}
-          onClick={onPlay}
-          disabled={tracks.length === 0}
-          aria-label={isPlaying ? "Pausar playlist" : "Tocar playlist"}
-        >
-          <span className={styles.playIcon}>{isPlaying ? "❚❚" : "▶"}</span>
-          {isPlaying ? "Pausar" : "Play"}
-        </button>
+        <div className={styles.headActions}>
+          <button
+            type="button"
+            className={`${styles.shuffleBtn} ${shuffle ? styles.shuffleOn : ""}`}
+            onClick={onToggleShuffle}
+            disabled={tracks.length === 0}
+            aria-pressed={shuffle}
+            aria-label={shuffle ? "Desativar ordem aleatória" : "Ativar ordem aleatória"}
+            title={shuffle ? "Ordem aleatória ligada" : "Ordem aleatória"}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              aria-hidden
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M16 3h5v5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 20 21 3" strokeLinecap="round" />
+              <path d="M21 16v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 15l6 6" strokeLinecap="round" />
+              <path d="M4 4l5 5" strokeLinecap="round" />
+            </svg>
+            Shuffle
+          </button>
+          <button
+            type="button"
+            className={styles.playBtn}
+            onClick={onPlay}
+            disabled={tracks.length === 0}
+            aria-label={isPlaying ? "Pausar playlist" : "Tocar playlist"}
+          >
+            <span className={styles.playIcon}>{isPlaying ? "❚❚" : "▶"}</span>
+            {isPlaying ? "Pausar" : "Play"}
+          </button>
+        </div>
       </div>
 
       {tracks.length > 0 && (
