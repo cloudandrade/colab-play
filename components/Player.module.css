@@ -35,16 +35,44 @@
   opacity: 0.85;
 }
 
-.videoHost,
+.videoHost {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* Controles só pelos nossos botões — evita cliques na UI do YouTube */
+  pointer-events: none;
+}
+
 .videoHost iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 100%;
   height: 100%;
   border: 0;
+  /* Escala/crop remove faixa superior (título) e inferior (logo/share) */
+  transform: translate(-50%, -50%) scale(1.55);
+  pointer-events: none;
+}
+
+.videoCover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #0a1410;
+}
+
+.videoCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .videoPlaceholder {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
   padding: 0.5rem;
@@ -57,7 +85,7 @@
 .skeletonMedia {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   background: linear-gradient(
     110deg,
     #15251c 8%,

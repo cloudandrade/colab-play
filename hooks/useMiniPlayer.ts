@@ -24,6 +24,10 @@ interface UseMiniPlayerOptions {
   onToggleMute: () => void;
 }
 
+/** Tamanho da janela Document PiP (inclui chrome do browser). */
+const PIP_WIDTH = 340;
+const PIP_HEIGHT = 165;
+
 /** Estilos espelhando o player principal (botões redondos + laranja no play). */
 const PIP_STYLE = `
   :root {
@@ -34,22 +38,26 @@ const PIP_STYLE = `
     --accent: #ff5c00;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
+  html, body {
     margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
     font-family: Figtree, system-ui, sans-serif;
     background: color-mix(in srgb, #102018 96%, transparent);
     color: var(--ink);
-    min-height: 100vh;
-    display: grid;
   }
   .wrap {
     width: 100%;
-    min-height: 100vh;
-    padding: 0.75rem 0.85rem 0.65rem;
+    height: 100%;
+    padding: 0.55rem 0.7rem 0.5rem;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 0.55rem;
+    justify-content: center;
+    gap: 0.45rem;
+    overflow: hidden;
   }
   .row {
     display: flex;
@@ -57,13 +65,13 @@ const PIP_STYLE = `
     justify-content: center;
     align-items: center;
     text-align: left;
-    gap: 0.7rem;
+    gap: 0.55rem;
     min-width: 0;
     width: 100%;
   }
   .art {
-    width: 52px;
-    height: 52px;
+    width: 44px;
+    height: 44px;
     border-radius: 0.3rem;
     object-fit: cover;
     background: #0a1410;
@@ -71,11 +79,11 @@ const PIP_STYLE = `
   }
   .meta {
     min-width: 0;
-    max-width: 14rem;
+    max-width: 12rem;
   }
   .meta strong {
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.85rem;
     line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
@@ -83,8 +91,8 @@ const PIP_STYLE = `
   }
   .meta span {
     display: block;
-    margin-top: 0.2rem;
-    font-size: 0.8rem;
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -94,9 +102,7 @@ const PIP_STYLE = `
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 0.4rem;
-    margin-top: auto;
-    padding-bottom: 0.1rem;
+    gap: 0.35rem;
   }
   .buttons {
     display: flex;
@@ -391,20 +397,41 @@ export function useMiniPlayer({
     if (!pip) return false;
     if (pip.window || pipWindowRef.current) {
       const existing = pipWindowRef.current ?? pip.window;
-      if (existing) syncPip(existing);
+      if (existing) {
+        try {
+          existing.resizeTo(PIP_WIDTH, PIP_HEIGHT);
+        } catch {
+          // ignore
+        }
+        syncPip(existing);
+      }
       return true;
     }
 
     openingRef.current = true;
     try {
       const win = await pip.requestWindow({
-        width: 340,
-        height: 200,
+        width: PIP_WIDTH,
+        height: PIP_HEIGHT,
         preferInitialWindowPlacement: true,
       });
+      // Chrome costuma reusar o tamanho anterior; força o tamanho desejado.
+      try {
+        win.resizeTo(PIP_WIDTH, PIP_HEIGHT);
+      } catch {
+        // ignore
+      }
       pipWindowRef.current = win;
       setPipOpen(true);
       mountPip(win);
+      // Garante após o layout do conteúdo
+      requestAnimationFrame(() => {
+        try {
+          win.resizeTo(PIP_WIDTH, PIP_HEIGHT);
+        } catch {
+          // ignore
+        }
+      });
       win.addEventListener("pagehide", () => {
         pipWindowRef.current = null;
         setPipOpen(false);

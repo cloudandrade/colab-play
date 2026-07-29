@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMiniPlayer } from "@/hooks/useMiniPlayer";
+import { artworkProxyPath } from "@/lib/artwork";
 import type { PlaylistTrack } from "@/lib/types";
 import styles from "./Player.module.css";
 
@@ -194,8 +195,11 @@ export default function Player({
           autoplay: 0,
           controls: 0,
           rel: 0,
-          modestbranding: 1,
           playsinline: 1,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          cc_load_policy: 0,
         },
         events: {
           onReady: (event) => {
@@ -407,6 +411,12 @@ export default function Player({
       <div className={`${styles.videoSlot} ${!current ? styles.videoSlotMuted : ""}`}>
         <div ref={hostRef} className={styles.videoHost} />
         {mediaLoading && current && <div className={styles.skeletonMedia} aria-hidden />}
+        {current && !playing && !mediaLoading && (
+          <div className={styles.videoCover} aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={artworkProxyPath(current.id)} alt="" />
+          </div>
+        )}
         {!current && (
           <p className={styles.videoPlaceholder}>Adicione faixas para começar</p>
         )}
