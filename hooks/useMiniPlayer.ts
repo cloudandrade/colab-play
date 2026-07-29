@@ -481,15 +481,22 @@ export function useMiniPlayer({
 
   useEffect(() => {
     function onVisibility() {
+      if (document.visibilityState === "visible") {
+        closePip();
+        return;
+      }
       if (document.visibilityState !== "hidden") return;
       if (!playingRef.current || !currentRef.current) return;
       if (!isMiniPlayerEnabled()) return;
-      void openPip();
+      void openPip().then(() => {
+        // Se o usuário já voltou enquanto o PiP abria, fecha de novo.
+        if (document.visibilityState === "visible") closePip();
+      });
     }
 
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [openPip]);
+  }, [openPip, closePip]);
 
   const enableMiniPlayer = useCallback(() => {
     setMiniPlayerEnabled(true);
