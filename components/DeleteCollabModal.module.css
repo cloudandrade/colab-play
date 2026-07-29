@@ -14,7 +14,7 @@
   padding: 1.35rem;
   border-radius: 0.7rem;
   background: #fff;
-  border: 2px solid color-mix(in srgb, #9b2c2c 25%, transparent);
+  border: 2px solid color-mix(in srgb, var(--danger) 25%, transparent);
   color: var(--ink);
 }
 
@@ -60,11 +60,11 @@
 }
 
 .field input:focus {
-  border-color: #9b2c2c;
+  border-color: var(--danger);
 }
 
 .error {
-  color: #9b2c2c;
+  color: var(--danger);
   font-size: 0.9rem;
 }
 
@@ -89,7 +89,7 @@
 }
 
 .danger {
-  background: #9b2c2c;
+  background: var(--danger);
   color: #fff;
 }
 

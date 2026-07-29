@@ -394,7 +394,7 @@
 .collabCard {
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   gap: 0.9rem;
   align-items: center;
   text-align: left;
@@ -419,6 +419,13 @@
   box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+.collabInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .collabMain {
   display: flex;
   flex-direction: column;
@@ -435,28 +442,33 @@
   text-overflow: ellipsis;
 }
 
-.collabMain span {
+.collabMain > span {
   color: var(--muted);
   font-size: 0.9rem;
 }
 
 .badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.72rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   font-weight: 800;
+  line-height: 1;
   padding: 0.4rem 0.6rem;
   border-radius: 0.3rem;
 }
 
-.badgeOpen {
-  background: #d8f5e4;
-  color: #14633d;
+.badgePublic {
+  background: var(--tag-public-bg);
+  color: var(--tag-public-fg);
 }
 
-.badgeClosed {
-  background: #ffe1cc;
-  color: #b34700;
+.badgePrivate {
+  background: var(--tag-private-bg);
+  color: var(--tag-private-fg);
 }
 
 .enter {
@@ -514,13 +526,13 @@
 }
 
 .deleteBtn {
-  background: color-mix(in srgb, #c0392b 12%, transparent);
-  color: #b83227;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .deleteBtn:hover {
   transform: translateY(-1px);
-  background: color-mix(in srgb, #c0392b 22%, transparent);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 .feedbackBtns {
@@ -548,7 +560,7 @@
   font-family: var(--font-body);
   white-space: nowrap;
   color: var(--ink);
-  background: color-mix(in srgb, var(--bg-deep) 92%, #fff);
+  background: var(--surface);
   box-shadow: 0 8px 22px color-mix(in srgb, #000 12%, transparent);
   cursor: pointer;
   transition:
@@ -587,7 +599,7 @@
     gap: 0.55rem;
     padding: 0.7rem 1rem 0.7rem 0.75rem;
     transform: translateY(-1px);
-    background: var(--bg-deep);
+    background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
     box-shadow: 0 10px 26px color-mix(in srgb, #000 16%, transparent);
   }
 
@@ -603,7 +615,7 @@
   gap: 0.55rem;
   padding: 0.7rem 1rem 0.7rem 0.75rem;
   transform: translateY(-1px);
-  background: var(--bg-deep);
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
   box-shadow: 0 10px 26px color-mix(in srgb, #000 16%, transparent);
   outline: none;
 }
@@ -644,10 +656,6 @@
   .collabCard {
     grid-template-columns: 1fr;
     gap: 0.55rem;
-  }
-
-  .badge {
-    justify-self: start;
   }
 
   .enter {

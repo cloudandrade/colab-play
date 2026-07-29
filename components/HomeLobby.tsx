@@ -144,19 +144,21 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
                     className={styles.collabCard}
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
-                    <span className={styles.collabMain}>
-                      <strong>{collab.name}</strong>
-                      <span>
-                        {collab.trackCount} faixa
-                        {collab.trackCount === 1 ? "" : "s"} na fila
+                    <span className={styles.collabInfo}>
+                      <span className={styles.collabMain}>
+                        <strong>{collab.name}</strong>
+                        <span>
+                          {collab.trackCount} faixa
+                          {collab.trackCount === 1 ? "" : "s"} na fila
+                        </span>
                       </span>
-                    </span>
-                    <span
-                      className={`${styles.badge} ${
-                        collab.isOpen ? styles.badgeOpen : styles.badgeClosed
-                      }`}
-                    >
-                      {collab.isOpen ? "Aberta" : "Fechada"}
+                      <span
+                        className={`${styles.badge} ${
+                          collab.isOpen ? styles.badgePublic : styles.badgePrivate
+                        }`}
+                      >
+                        {collab.isOpen ? "Pública" : "Privada"}
+                      </span>
                     </span>
                     <span className={styles.enter}>Entrar →</span>
                   </Link>

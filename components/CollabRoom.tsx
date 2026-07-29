@@ -287,7 +287,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   ← Collabs
                 </Link>
                 <span aria-hidden> · </span>
-                {collab.isOpen ? "Aberta" : "Fechada"}
+                {collab.isOpen ? "Pública" : "Privada"}
               </p>
               <div className={styles.titleRow}>
                 <h1 className={styles.brandRoom}>{collab.name}</h1>

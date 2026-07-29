@@ -1,11 +1,26 @@
 :root {
+  /* Paleta CoLab Play — mint + laranja + preto esverdeado */
   --bg: #e3f6eb;
   --bg-deep: #c6ebd5;
+  --surface: #ffffff;
   --ink: #102018;
   --muted: #3f5f4d;
   --accent: #ff5c00;
   --accent-strong: #d94800;
   --accent-soft: #ffb27a;
+  --on-accent: #102018;
+  --on-dark: #f4fff8;
+
+  /* Semântico: alerta/perigo em laranja escuro (sem vermelho puro) */
+  --danger: #c2410c;
+  --danger-soft: #ffedd5;
+
+  /* Tags de status (pública / privada) */
+  --tag-public-bg: #ffe8d4;
+  --tag-public-fg: var(--accent-strong);
+  --tag-private-bg: var(--bg-deep);
+  --tag-private-fg: var(--ink);
+
   --font-display: var(--font-syne), "Syne", sans-serif;
   --font-body: var(--font-figtree), "Figtree", sans-serif;
 }

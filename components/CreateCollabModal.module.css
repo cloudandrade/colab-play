@@ -94,7 +94,7 @@
 }
 
 .error {
-  color: #9b2c2c;
+  color: var(--danger);
   font-size: 0.9rem;
 }
 

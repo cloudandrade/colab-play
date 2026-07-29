@@ -38,7 +38,7 @@
 }
 
 .error {
-  border-color: color-mix(in srgb, #e85d5d 55%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
 }
 
 .info {

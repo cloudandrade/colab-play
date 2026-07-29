@@ -281,8 +281,8 @@
 
 .remove:hover,
 .remove:focus-visible {
-  color: #9b2c2c;
-  background: color-mix(in srgb, #9b2c2c 10%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
   outline: none;
 }
 

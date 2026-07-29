@@ -146,7 +146,7 @@ export default function CreateCollabModal({
                   checked={isOpen}
                   onChange={(e) => setIsOpen(e.target.checked)}
                 />
-                <span>Collab aberta — qualquer um entra e adiciona música</span>
+                <span>Collab pública — qualquer um entra e adiciona música</span>
               </label>
 
               {!isOpen && (
