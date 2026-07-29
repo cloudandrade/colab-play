@@ -4,10 +4,26 @@ type Bucket = {
 };
 
 const buckets = new Map<string, Bucket>();
+const MAX_BUCKETS = 5_000;
 
 export type RateLimitResult =
   | { ok: true; remaining: number; resetAt: number }
   | { ok: false; remaining: 0; resetAt: number; retryAfterSec: number };
+
+function pruneExpired(now: number) {
+  for (const [key, bucket] of buckets) {
+    if (bucket.resetAt <= now) buckets.delete(key);
+  }
+  // Hard cap: remove entradas mais antigas se ainda estiver grande
+  if (buckets.size <= MAX_BUCKETS) return;
+  const overflow = buckets.size - MAX_BUCKETS;
+  let removed = 0;
+  for (const key of buckets.keys()) {
+    buckets.delete(key);
+    removed += 1;
+    if (removed >= overflow) break;
+  }
+}
 
 /**
  * Rate limit in-memory (adequado a single-instance / serverless warm).
@@ -18,6 +34,12 @@ export function rateLimit(
   options: { limit: number; windowMs: number },
 ): RateLimitResult {
   const now = Date.now();
+
+  // Limpa de tempos em tempos (a cada ~64 inserts)
+  if (buckets.size > 64 && buckets.size % 16 === 0) {
+    pruneExpired(now);
+  }
+
   const current = buckets.get(key);
 
   if (!current || current.resetAt <= now) {

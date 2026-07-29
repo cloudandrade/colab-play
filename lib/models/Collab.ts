@@ -49,12 +49,6 @@ const collabSchema = new Schema(
 
 export type CollabDocument = InferSchemaType<typeof collabSchema>;
 
-// Next.js HMR reusa models.Collab com schema antigo — recria para aplicar campos novos.
-if (mongoose.models.Collab) {
-  delete mongoose.models.Collab;
-}
-
-export const CollabModel: Model<CollabDocument> = mongoose.model<CollabDocument>(
-  "Collab",
-  collabSchema,
-);
+export const CollabModel: Model<CollabDocument> =
+  (mongoose.models.Collab as Model<CollabDocument>) ||
+  mongoose.model<CollabDocument>("Collab", collabSchema);

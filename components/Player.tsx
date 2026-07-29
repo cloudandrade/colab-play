@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useMiniPlayer } from "@/hooks/useMiniPlayer";
 import type { PlaylistTrack } from "@/lib/types";
 import styles from "./Player.module.css";
 
@@ -95,6 +96,23 @@ function ShuffleIcon() {
       <path d="M21 16v5h-5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M15 15l6 6" strokeLinecap="round" />
       <path d="M4 4l5 5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MiniPlayerIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="5" width="18" height="12" rx="1.5" />
+      <rect
+        x={active ? "13" : "12"}
+        y={active ? "12" : "11"}
+        width={active ? "7" : "6"}
+        height={active ? "5" : "4"}
+        rx="0.8"
+        fill="currentColor"
+        stroke="none"
+      />
     </svg>
   );
 }
@@ -313,6 +331,40 @@ export default function Player({
     }
   }
 
+  const {
+    supported: miniSupported,
+    enabled: miniEnabled,
+    pipOpen,
+    openPip,
+    closePip,
+    enableMiniPlayer,
+    disableMiniPlayer,
+  } = useMiniPlayer({
+    current,
+    playing,
+    canGoPrev,
+    canGoNext,
+    volume,
+    muted,
+    onTogglePlay: togglePlay,
+    onPrev,
+    onNext,
+    onVolumeChange: (next) => {
+      setVolume(next);
+      setMuted(false);
+    },
+    onToggleMute: () => {
+      setMuted((prev) => {
+        if (prev) return false;
+        if (volume === 0) {
+          setVolume(80);
+          return false;
+        }
+        return true;
+      });
+    },
+  });
+
   function onSeek(value: number) {
     const player = playerRef.current;
     if (!player) return;
@@ -324,8 +376,31 @@ export default function Player({
     }
   }
 
+  async function handleMiniPlayerClick() {
+    if (!miniSupported) return;
+    if (!miniEnabled) {
+      enableMiniPlayer();
+    }
+    if (pipOpen) {
+      closePip();
+      return;
+    }
+    const opened = await openPip();
+    if (!opened && !miniEnabled) {
+      enableMiniPlayer();
+      await openPip();
+    }
+  }
+
   const max = duration || trackDuration || 0;
   const volumeValue = muted ? 0 : volume;
+  const miniLabel = !miniSupported
+    ? "Mini-player não suportado neste browser"
+    : !miniEnabled
+      ? "Reativar mini-player"
+      : pipOpen
+        ? "Fechar mini-player"
+        : "Abrir mini-player";
 
   return (
     <div className={styles.panel} role="region" aria-label="Player">
@@ -395,34 +470,57 @@ export default function Player({
             </button>
           </div>
 
-          <div className={styles.volume} ref={volumeWrapRef}>
-            <button
-              type="button"
-              className={styles.volumeBtn}
-              onClick={() => setVolumeOpen((open) => !open)}
-              aria-expanded={volumeOpen}
-              aria-label="Volume"
-            >
-              <SpeakerIcon muted={muted || volume === 0} />
-            </button>
-            {volumeOpen && (
-              <div className={styles.volumePopover}>
-                <input
-                  className={styles.volumeSlider}
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={volumeValue}
-                  onChange={(e) => {
-                    const next = Number(e.target.value);
-                    setVolume(next);
-                    setMuted(false);
-                  }}
-                  aria-label="Nível do volume"
-                />
-              </div>
+          <div className={styles.sideActions}>
+            {miniSupported && (
+              <button
+                type="button"
+                className={`${styles.miniBtn} ${
+                  miniEnabled && (pipOpen || playing) ? styles.miniBtnOn : ""
+                } ${!miniEnabled ? styles.miniBtnOff : ""}`}
+                onClick={() => void handleMiniPlayerClick()}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (miniEnabled) disableMiniPlayer();
+                  else enableMiniPlayer();
+                }}
+                disabled={!current}
+                aria-pressed={pipOpen}
+                aria-label={miniLabel}
+                title={`${miniLabel} (botão direito: ${miniEnabled ? "desativar" : "ativar"})`}
+              >
+                <MiniPlayerIcon active={pipOpen || (miniEnabled && playing)} />
+              </button>
             )}
+
+            <div className={styles.volume} ref={volumeWrapRef}>
+              <button
+                type="button"
+                className={styles.volumeBtn}
+                onClick={() => setVolumeOpen((open) => !open)}
+                aria-expanded={volumeOpen}
+                aria-label="Volume"
+              >
+                <SpeakerIcon muted={muted || volume === 0} />
+              </button>
+              {volumeOpen && (
+                <div className={styles.volumePopover}>
+                  <input
+                    className={styles.volumeSlider}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={volumeValue}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setVolume(next);
+                      setMuted(false);
+                    }}
+                    aria-label="Nível do volume"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
