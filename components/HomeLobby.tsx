@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import CreateCollabModal from "@/components/CreateCollabModal";
 import ProposalModal from "@/components/ProposalModal";
 import ReportModal from "@/components/ReportModal";
@@ -14,12 +14,43 @@ interface HomeLobbyProps {
   initialCollabs: CollabPublic[];
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesCollabName(name: string, query: string): boolean {
+  const q = normalizeText(query);
+  if (!q) return true;
+
+  const n = normalizeText(name);
+  if (n.includes(q)) return true;
+
+  const words = n.split(/\s+/).filter(Boolean);
+  if (words.some((word) => word.startsWith(q) || q.startsWith(word))) {
+    return true;
+  }
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return tokens.every((token) =>
+    words.some((word) => word.includes(token) || token.includes(word)),
+  );
+}
+
 export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const collabs = initialCollabs;
+  const [search, setSearch] = useState("");
+
+  const filteredCollabs = useMemo(
+    () => initialCollabs.filter((collab) => matchesCollabName(collab.name, search)),
+    [initialCollabs, search],
+  );
 
   function handleCreated(id: string) {
     setModalOpen(false);
@@ -65,24 +96,54 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
               <p className={styles.lobbyEyebrow}>Na área</p>
               <h2 id="lobby-heading">Collabs rolando</h2>
             </div>
+            {initialCollabs.length > 0 && (
+              <label className={styles.collabSearch}>
+                <span className={styles.srOnly}>Buscar collab</span>
+                <span className={styles.collabSearchIcon} aria-hidden>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <circle
+                      cx="11"
+                      cy="11"
+                      r="6.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                    <path
+                      d="m16.2 16.2 4.3 4.3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar collab…"
+                  autoComplete="off"
+                />
+              </label>
+            )}
           </div>
 
-          {collabs.length === 0 ? (
+          {initialCollabs.length === 0 ? (
             <p className={styles.emptyLobby}>
               Nenhuma collab ainda. Cria a primeira e chama o rolê.
             </p>
+          ) : filteredCollabs.length === 0 ? (
+            <p className={styles.emptyLobby}>
+              Nenhuma collab encontrada para “{search.trim()}”.
+            </p>
           ) : (
             <ul className={styles.collabList}>
-              {collabs.map((collab, index) => (
+              {filteredCollabs.map((collab, index) => (
                 <li key={collab.id}>
                   <Link
                     href={`/collab/${collab.id}`}
                     className={styles.collabCard}
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
-                    <span className={styles.collabIndex} aria-hidden>
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
                     <span className={styles.collabMain}>
                       <strong>{collab.name}</strong>
                       <span>
@@ -109,17 +170,47 @@ export default function HomeLobby({ initialCollabs }: HomeLobbyProps) {
       <div className={styles.feedbackBtns}>
         <button
           type="button"
-          className={styles.proposalBtn}
+          className={styles.feedbackBtn}
           onClick={() => setReportOpen(true)}
+          aria-label="Encontrei um problema"
         >
-          Encontrei um problema
+          <span className={styles.feedbackIcon} aria-hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+              <path
+                d="M12 7v7"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <circle cx="12" cy="17.2" r="1.2" fill="currentColor" />
+            </svg>
+          </span>
+          <span className={styles.feedbackLabel}>Encontrei um problema</span>
         </button>
         <button
           type="button"
-          className={styles.proposalBtn}
+          className={styles.feedbackBtn}
           onClick={() => setProposalOpen(true)}
+          aria-label="Sugestão de melhoria"
         >
-          Propostas de melhoria
+          <span className={styles.feedbackIcon} aria-hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+              <path
+                d="M9 18h6M10 21h4"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <path
+                d="M12 3a6 6 0 0 0-3.5 10.8c.6.45 1 1.1 1.1 1.85V16h4.8v-.35c.1-.75.5-1.4 1.1-1.85A6 6 0 0 0 12 3Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span className={styles.feedbackLabel}>Sugestão de melhoria</span>
         </button>
       </div>
 
