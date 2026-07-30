@@ -8,6 +8,7 @@ import Player from "@/components/Player";
 import UnlockModal from "@/components/UnlockModal";
 import DeleteCollabModal from "@/components/DeleteCollabModal";
 import { ToastViewport, useToasts } from "@/components/Toast";
+import { flattenGenreGroups, type MusicGenre } from "@/lib/genre";
 import type { CollabDetail, PlaylistTrackView, SearchResult } from "@/lib/types";
 import styles from "@/app/page.module.css";
 
@@ -50,42 +51,105 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   const [shareHint, setShareHint] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
+  const [groupByGenre, setGroupByGenre] = useState(false);
+  const [groupLoading, setGroupLoading] = useState(false);
   /** Ordem visual local (só no cliente). null = ordem original do servidor. */
   const [shuffledIds, setShuffledIds] = useState<string[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   const locked = collab.locked;
   const originalTracks = collab.tracks;
-  const tracks = useMemo(
-    () => (shuffle ? orderTracks(originalTracks, shuffledIds) : originalTracks),
-    [shuffle, shuffledIds, originalTracks],
-  );
+  const tracks = useMemo(() => {
+    if (shuffle) return orderTracks(originalTracks, shuffledIds);
+    if (groupByGenre) return flattenGenreGroups(originalTracks);
+    return originalTracks;
+  }, [shuffle, shuffledIds, groupByGenre, originalTracks]);
   const safeIndex =
     tracks.length === 0 ? 0 : Math.min(currentIndex, tracks.length - 1);
   const canGoPrev = safeIndex > 0;
   const canGoNext = tracks.length > 0 && safeIndex < tracks.length - 1;
 
+  function restoreIndexForTrack(
+    currentId: string | undefined,
+    nextTracks: PlaylistTrackView[],
+  ) {
+    if (!currentId) {
+      setCurrentIndex(0);
+      return;
+    }
+    const idx = nextTracks.findIndex((t) => t.id === currentId);
+    setCurrentIndex(idx >= 0 ? idx : 0);
+  }
+
   function handleToggleShuffle() {
-    if (tracks.length === 0) return;
+    if (originalTracks.length === 0) return;
 
     if (shuffle) {
       const currentId = tracks[safeIndex]?.id;
       setShuffle(false);
       setShuffledIds(null);
-      if (currentId) {
-        const originalIndex = originalTracks.findIndex((t) => t.id === currentId);
-        setCurrentIndex(originalIndex >= 0 ? originalIndex : 0);
-      } else {
-        setCurrentIndex(0);
-      }
+      restoreIndexForTrack(currentId, originalTracks);
       return;
     }
 
+    setGroupByGenre(false);
     const nextOrder = shuffleIds(originalTracks.map((t) => t.id));
     setShuffledIds(nextOrder);
     setShuffle(true);
     setCurrentIndex(0);
     setShouldPlay(false);
+  }
+
+  async function handleToggleGroup() {
+    if (originalTracks.length === 0 || groupLoading) return;
+
+    const currentId = tracks[safeIndex]?.id;
+
+    if (groupByGenre) {
+      setGroupByGenre(false);
+      restoreIndexForTrack(currentId, originalTracks);
+      return;
+    }
+
+    setShuffle(false);
+    setShuffledIds(null);
+
+    const needsLookup = originalTracks.some((t) => !t.genre);
+    let nextSource = originalTracks;
+
+    if (needsLookup) {
+      setGroupLoading(true);
+      try {
+        const res = await fetch(`/api/collabs/${collab.id}/genres`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          pushToast("Não foi possível consultar os estilos.", "error");
+          return;
+        }
+        const data = (await res.json()) as {
+          collab: CollabDetail;
+          resolved?: number;
+        };
+        setCollab(data.collab);
+        nextSource = data.collab.tracks;
+        if ((data.resolved ?? 0) > 0) {
+          pushToast(
+            `Estilos atualizados em ${data.resolved} faixa${data.resolved === 1 ? "" : "s"}.`,
+            "success",
+          );
+        }
+      } catch {
+        pushToast("Falha ao consultar estilos.", "error");
+        return;
+      } finally {
+        setGroupLoading(false);
+      }
+    }
+
+    const grouped = flattenGenreGroups(nextSource);
+    setGroupByGenre(true);
+    restoreIndexForTrack(currentId, grouped);
   }
 
   const playNext = useCallback(() => {
@@ -173,6 +237,32 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     }
 
     pushToast(`Adicionada: ${track.title}`, "success");
+  }
+
+  async function handleChangeGenre(id: string, genre: MusicGenre) {
+    const currentId = tracks[safeIndex]?.id;
+    const res = await fetch(`/api/collabs/${collab.id}/genres`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackId: id, genre }),
+    });
+    const data = (await res.json()) as {
+      collab?: CollabDetail;
+      error?: string;
+    };
+
+    if (!res.ok || !data.collab) {
+      pushToast(data.error || "Não foi possível alterar a categoria.", "error");
+      throw new Error(data.error || "genre_update_failed");
+    }
+
+    setCollab(data.collab);
+
+    if (groupByGenre) {
+      restoreIndexForTrack(currentId, flattenGenreGroups(data.collab.tracks));
+    }
+
+    pushToast(`Categoria alterada para ${genre}.`, "success");
   }
 
   async function handleRemove(id: string) {
@@ -360,11 +450,15 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   currentId={tracks[safeIndex]?.id ?? null}
                   isPlaying={shouldPlay}
                   shuffle={shuffle}
+                  groupByGenre={groupByGenre}
+                  groupLoading={groupLoading}
                   isOwner={collab.isOwner}
                   removalVotesRequired={collab.removalVotesRequired}
                   onToggleShuffle={handleToggleShuffle}
+                  onToggleGroup={() => void handleToggleGroup()}
                   onSelect={handleSelect}
                   onRemove={handleRemove}
+                  onChangeGenre={handleChangeGenre}
                   onPlay={handlePlaylistPlay}
                 />
               </div>
@@ -378,12 +472,15 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                 currentIndex={safeIndex}
                 shouldPlay={shouldPlay}
                 shuffle={shuffle}
+                groupByGenre={groupByGenre}
+                groupLoading={groupLoading}
                 canGoPrev={canGoPrev}
                 canGoNext={canGoNext}
                 onShouldPlayChange={setShouldPlay}
                 onNext={playNext}
                 onPrev={playPrev}
                 onToggleShuffle={handleToggleShuffle}
+                onToggleGroup={() => void handleToggleGroup()}
               />
             </aside>
           )}

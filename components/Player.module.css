@@ -190,9 +190,15 @@
   gap: 0.5rem;
 }
 
-.shuffleBtn {
+.leftActions {
   grid-column: 1;
   justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.shuffleBtn {
   border: 0;
   background: transparent;
   color: inherit;

@@ -11,12 +11,15 @@ interface PlayerProps {
   currentIndex: number;
   shouldPlay: boolean;
   shuffle: boolean;
+  groupByGenre: boolean;
+  groupLoading?: boolean;
   canGoPrev: boolean;
   canGoNext: boolean;
   onShouldPlayChange: (playing: boolean) => void;
   onNext: () => void;
   onPrev: () => void;
   onToggleShuffle: () => void;
+  onToggleGroup: () => void;
 }
 
 interface YtPlayer {
@@ -101,6 +104,17 @@ function ShuffleIcon() {
   );
 }
 
+function GroupIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 6h16" strokeLinecap="round" />
+      <path d="M4 12h10" strokeLinecap="round" />
+      <path d="M4 18h7" strokeLinecap="round" />
+      <path d="M17 14v7M14 17.5h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function MiniPlayerIcon({ active }: { active: boolean }) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -144,12 +158,15 @@ export default function Player({
   currentIndex,
   shouldPlay,
   shuffle,
+  groupByGenre,
+  groupLoading = false,
   canGoPrev,
   canGoNext,
   onShouldPlayChange,
   onNext,
   onPrev,
   onToggleShuffle,
+  onToggleGroup,
 }: PlayerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YtPlayer | null>(null);
@@ -440,17 +457,43 @@ export default function Player({
 
       <div className={`${styles.controls} ${!current ? styles.controlsDisabled : ""}`}>
         <div className={styles.transport}>
-          <button
-            type="button"
-            className={`${styles.shuffleBtn} ${shuffle ? styles.shuffleOn : ""}`}
-            onClick={onToggleShuffle}
-            disabled={!current}
-            aria-pressed={shuffle}
-            aria-label={shuffle ? "Desativar ordem aleatória" : "Ativar ordem aleatória"}
-            title={shuffle ? "Ordem aleatória ligada" : "Ordem aleatória"}
-          >
-            <ShuffleIcon />
-          </button>
+          <div className={styles.leftActions}>
+            <button
+              type="button"
+              className={`${styles.shuffleBtn} ${shuffle ? styles.shuffleOn : ""}`}
+              onClick={onToggleShuffle}
+              disabled={!current}
+              aria-pressed={shuffle}
+              aria-label={shuffle ? "Desativar ordem aleatória" : "Ativar ordem aleatória"}
+              title={shuffle ? "Ordem aleatória ligada" : "Ordem aleatória"}
+            >
+              <ShuffleIcon />
+            </button>
+            <button
+              type="button"
+              className={`${styles.shuffleBtn} ${groupByGenre ? styles.shuffleOn : ""}`}
+              onClick={onToggleGroup}
+              disabled={!current || groupLoading}
+              aria-pressed={groupByGenre}
+              aria-busy={groupLoading}
+              aria-label={
+                groupLoading
+                  ? "Consultando estilos"
+                  : groupByGenre
+                    ? "Desativar agrupamento por estilo"
+                    : "Agrupar por estilo"
+              }
+              title={
+                groupLoading
+                  ? "Consultando estilos…"
+                  : groupByGenre
+                    ? "Agrupamento por estilo ligado (só nesta tela)"
+                    : "Agrupar por estilo (só nesta tela)"
+              }
+            >
+              <GroupIcon />
+            </button>
+          </div>
 
           <div className={styles.buttons}>
             <button

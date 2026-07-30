@@ -47,6 +47,7 @@ type CollabRecord = {
     streamUrl: string;
     addedAt: string;
     addedBy?: string | null;
+    genre?: string | null;
   }>;
   removalVotes?: Array<{
     trackId: string;
@@ -80,6 +81,7 @@ function toCollab(doc: CollabRecord): Collab {
         streamUrl: track.streamUrl,
         addedAt: track.addedAt,
         ...(track.addedBy ? { addedBy: track.addedBy } : {}),
+        ...(track.genre ? { genre: track.genre } : {}),
       };
     }),
     removalVotes: (doc.removalVotes ?? []).map((vote) => ({
@@ -473,4 +475,38 @@ export async function deleteCollab(
   await connectDb();
   await CollabModel.deleteOne({ id }).exec();
   return { deleted: true };
+}
+
+/**
+ * Persiste gêneros resolvidos nas faixas (metadado compartilhado).
+ * Não altera a ordem da playlist — o agrupamento visual continua só no cliente.
+ */
+export async function setTrackGenres(
+  collabId: string,
+  updates: Array<{ trackId: string; genre: string }>,
+): Promise<Collab | null> {
+  if (updates.length === 0) return getCollab(collabId);
+
+  await connectDb();
+  const existing = await CollabModel.findOne({ id: collabId }).lean().exec();
+  if (!existing) return null;
+
+  const byId = new Map(updates.map((u) => [u.trackId, u.genre]));
+  const tracks = (existing.tracks ?? []).map((track) => {
+    const genre = byId.get(track.id);
+    if (!genre) return track;
+    return { ...track, genre };
+  });
+
+  await CollabModel.updateOne(
+    { id: collabId },
+    {
+      $set: {
+        tracks,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  ).exec();
+
+  return getCollab(collabId);
 }

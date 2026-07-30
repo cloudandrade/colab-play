@@ -12,6 +12,8 @@ export interface PlaylistTrack {
   streamUrl: string;
   addedAt: string;
   addedBy?: string;
+  /** Estilo resolvido (Deezer/iTunes/heurística). Metadado compartilhado; o agrupamento visual é só no cliente. */
+  genre?: string | null;
 }
 
 /** Track as sent to the client (includes vote state). */

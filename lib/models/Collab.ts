@@ -15,6 +15,7 @@ const trackSchema = new Schema(
     streamUrl: { type: String, required: true },
     addedAt: { type: String, required: true },
     addedBy: { type: String, required: false },
+    genre: { type: String, default: null },
   },
   { _id: false },
 );
