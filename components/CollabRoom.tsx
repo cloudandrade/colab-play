@@ -32,6 +32,7 @@ function toPreviewTrack(track: SearchResult): PlaylistTrackView {
     addedAt: new Date().toISOString(),
     removalVoteCount: 0,
     hasVoted: false,
+    canRemoveDirectly: false,
   };
 }
 
@@ -381,7 +382,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     setShuffledIds((ids) => (ids ? ids.filter((trackId) => trackId !== id) : null));
     pushToast(
       data.asOwner
-        ? "Faixa removida (dono)."
+        ? "Faixa removida."
         : "Faixa removida pelos votos da galera.",
       "success",
     );

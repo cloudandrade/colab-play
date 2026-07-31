@@ -97,7 +97,6 @@ function TrackRow({
   currentId,
   showContributors,
   showGenreEdit,
-  isOwner,
   removalVotesRequired,
   onSelect,
   onRemove,
@@ -108,7 +107,6 @@ function TrackRow({
   currentId: string | null;
   showContributors: boolean;
   showGenreEdit: boolean;
-  isOwner: boolean;
   removalVotesRequired: number;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
@@ -170,8 +168,9 @@ function TrackRow({
     };
   }, [menuOpen]);
 
-  const voteLabel = isOwner
-    ? "Remover (dono)"
+  const canRemoveDirectly = track.canRemoveDirectly;
+  const voteLabel = canRemoveDirectly
+    ? "Remover (sua faixa ou dono da collab)"
     : track.hasVoted
       ? `Cancelar pedido ${votes}/${removalVotesRequired}`
       : votes > 0
@@ -331,7 +330,7 @@ function TrackRow({
         <button
           type="button"
           className={`${styles.remove} ${
-            !isOwner && votes > 0 ? styles.voteRemove : ""
+            !canRemoveDirectly && votes > 0 ? styles.voteRemove : ""
           } ${track.hasVoted ? styles.voted : ""}`}
           onClick={() => onRemove(track.id)}
           aria-label={voteLabel}
@@ -339,13 +338,13 @@ function TrackRow({
         >
           <span
             className={
-              !isOwner && votes > 0 ? styles.removeStack : undefined
+              !canRemoveDirectly && votes > 0 ? styles.removeStack : undefined
             }
           >
             <svg
               viewBox="0 0 24 24"
-              width={!isOwner && votes > 0 ? 14 : 18}
-              height={!isOwner && votes > 0 ? 14 : 18}
+              width={!canRemoveDirectly && votes > 0 ? 14 : 18}
+              height={!canRemoveDirectly && votes > 0 ? 14 : 18}
               aria-hidden
               fill="none"
               stroke="currentColor"
@@ -356,7 +355,7 @@ function TrackRow({
               <path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
               <path d="M10 11v6M14 11v6" strokeLinecap="round" />
             </svg>
-            {!isOwner && votes > 0 && (
+            {!canRemoveDirectly && votes > 0 && (
               <span className={styles.voteBadge}>
                 {votes}/{removalVotesRequired}
               </span>
@@ -518,7 +517,6 @@ export default function Playlist({
               currentId={currentId}
               showContributors={showContributors}
               showGenreEdit={false}
-              isOwner={isOwner}
               removalVotesRequired={removalVotesRequired}
               onSelect={onSelect}
               onRemove={onRemove}
@@ -559,7 +557,6 @@ export default function Playlist({
                     currentId={currentId}
                     showContributors={showContributors}
                     showGenreEdit
-                    isOwner={isOwner}
                     removalVotesRequired={removalVotesRequired}
                     onSelect={onSelect}
                     onRemove={onRemove}

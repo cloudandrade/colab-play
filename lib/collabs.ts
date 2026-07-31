@@ -184,10 +184,15 @@ export function toDetail(
     : null;
   const needsProfile = !collab.isOpen && !locked && !member;
 
+  const myIpKey = clientIp ? memberKeyFromIp(clientIp) : null;
+
   const tracks: PlaylistTrackView[] = locked
     ? []
     : collab.tracks.map((track) => {
         const voters = voteMap.get(track.id) ?? [];
+        const isTrackAdder = Boolean(
+          myIpKey && track.addedByIp && track.addedByIp === myIpKey,
+        );
         return {
           id: track.id,
           title: track.title,
@@ -204,6 +209,7 @@ export function toDetail(
           hasVoted: clientIp
             ? voters.some((ip) => sameIp(ip, clientIp))
             : false,
+          canRemoveDirectly: isOwner || isTrackAdder,
         };
       });
 
@@ -431,6 +437,33 @@ export async function addTrackToCollab(
   return getCollab(collabId);
 }
 
+async function persistTrackRemoval(
+  collabId: string,
+  collab: Collab,
+  trackId: string,
+): Promise<Collab | null> {
+  const now = new Date().toISOString();
+  // Filtra em memória + $set: evita $pull acidentalmente afetar outras faixas/votos
+  const nextTracks = collab.tracks.filter((track) => track.id !== trackId);
+  const nextVotes = (collab.removalVotes ?? []).filter(
+    (vote) => vote.trackId !== trackId,
+  );
+
+  await connectDb();
+  await CollabModel.collection.updateOne(
+    { id: collabId },
+    {
+      $set: {
+        tracks: nextTracks,
+        removalVotes: nextVotes,
+        updatedAt: now,
+      },
+    },
+  );
+
+  return getCollab(collabId);
+}
+
 export async function removeTrackFromCollab(
   collabId: string,
   trackId: string,
@@ -441,26 +474,22 @@ export async function removeTrackFromCollab(
     return { error: "Collab não encontrada.", status: 404 };
   }
 
-  const exists = collab.tracks.some((track) => track.id === trackId);
-  if (!exists) {
+  const track = collab.tracks.find((item) => item.id === trackId);
+  if (!track) {
     return { error: "Faixa não encontrada.", status: 404 };
   }
 
-  const owner = sameIp(collab.creatorIp, clientIp);
+  const isCollabOwner = sameIp(collab.creatorIp, clientIp);
+  const isTrackAdder = Boolean(
+    clientIp &&
+      clientIp !== "unknown" &&
+      track.addedByIp &&
+      track.addedByIp === memberKeyFromIp(clientIp),
+  );
 
-  if (owner) {
-    await connectDb();
-    await CollabModel.updateOne(
-      { id: collabId },
-      {
-        $pull: {
-          tracks: { id: trackId },
-          removalVotes: { trackId },
-        },
-        $set: { updatedAt: new Date().toISOString() },
-      },
-    ).exec();
-    const updated = await getCollab(collabId);
+  // Dono da collab OU quem adicionou a faixa → remoção direta (sem votos)
+  if (isCollabOwner || isTrackAdder) {
+    const updated = await persistTrackRemoval(collabId, collab, trackId);
     if (!updated) {
       return { error: "Collab não encontrada.", status: 404 };
     }
@@ -491,7 +520,7 @@ export async function removeTrackFromCollab(
     entry.voterIps = entry.voterIps.filter((ip) => !sameIp(ip, clientIp));
     action = "unvoted";
   } else {
-    entry.voterIps.push(clientIp);
+    entry.voterIps.push(normalizeIp(clientIp));
     action = "voted";
   }
 
@@ -503,18 +532,7 @@ export async function removeTrackFromCollab(
       : votes;
 
   if (voteCount >= REMOVAL_VOTES_REQUIRED) {
-    await connectDb();
-    await CollabModel.collection.updateOne(
-      { id: collabId },
-      {
-        $pull: {
-          tracks: { id: trackId },
-          removalVotes: { trackId },
-        },
-        $set: { updatedAt: now },
-      } as Record<string, unknown>,
-    );
-    const updated = await getCollab(collabId);
+    const updated = await persistTrackRemoval(collabId, collab, trackId);
     if (!updated) {
       return { error: "Collab não encontrada.", status: 404 };
     }
@@ -522,7 +540,6 @@ export async function removeTrackFromCollab(
   }
 
   await connectDb();
-  // updateOne via collection evita strip de campos por schema cacheado no HMR
   await CollabModel.collection.updateOne(
     { id: collabId },
     {
@@ -538,7 +555,6 @@ export async function removeTrackFromCollab(
     return { error: "Collab não encontrada.", status: 404 };
   }
 
-  // Garante contagem correta na resposta mesmo se a leitura vier defasada
   const withVotes: Collab = {
     ...updated,
     removalVotes: nextVotes,

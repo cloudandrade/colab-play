@@ -41,6 +41,8 @@ export interface PlaylistTrack {
 export interface PlaylistTrackView extends PlaylistTrack {
   removalVoteCount: number;
   hasVoted: boolean;
+  /** Pode remover na hora (dono da collab ou quem adicionou a faixa). */
+  canRemoveDirectly: boolean;
 }
 
 export interface RemovalVote {

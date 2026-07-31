@@ -95,10 +95,11 @@ export async function POST(
       resolveStoredArtworkUrl(trackId, source, artworkRaw) ??
       (artworkRaw && isSafeHttpsUrl(artworkRaw) ? artworkRaw : null);
 
-    // Collabs privadas exigem perfil (nome + figurinha) antes de adicionar.
+    // Sempre grava quem adicionou (hash do IP) — permite remoção direta pelo autor da faixa.
     let addedBy: string | undefined;
     let addedByAvatar: string | undefined;
-    let addedByIp: string | undefined;
+    const addedByIp = memberKeyFromIp(ip);
+
     if (!access.collab.isOpen) {
       const member = findMember(access.collab, ip);
       if (!member) {
@@ -112,7 +113,6 @@ export async function POST(
       }
       addedBy = member.name;
       addedByAvatar = member.avatarId;
-      addedByIp = memberKeyFromIp(ip);
     }
 
     const track: PlaylistTrack = {
@@ -127,9 +127,9 @@ export async function POST(
           ? `https://www.youtube.com/watch?v=${encodeURIComponent(trackId)}`
           : `/api/stream?id=${encodeURIComponent(trackId)}`,
       addedAt: new Date().toISOString(),
+      addedByIp,
       ...(addedBy ? { addedBy } : {}),
       ...(addedByAvatar ? { addedByAvatar } : {}),
-      ...(addedByIp ? { addedByIp } : {}),
     };
 
     const updated = await addTrackToCollab(id, track);
