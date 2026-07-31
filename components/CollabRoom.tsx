@@ -17,6 +17,24 @@ interface CollabRoomProps {
   initialCollab: CollabDetail;
 }
 
+function toPreviewTrack(track: SearchResult): PlaylistTrackView {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    artworkUrl: track.artworkUrl,
+    duration: track.duration,
+    source: track.source,
+    streamUrl:
+      track.source === "youtube"
+        ? `https://www.youtube.com/watch?v=${encodeURIComponent(track.id)}`
+        : `/api/stream?id=${encodeURIComponent(track.id)}`,
+    addedAt: new Date().toISOString(),
+    removalVoteCount: 0,
+    hasVoted: false,
+  };
+}
+
 function shuffleIds(ids: string[]): string[] {
   const next = [...ids];
   for (let i = next.length - 1; i > 0; i -= 1) {
@@ -54,12 +72,20 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   const [shuffle, setShuffle] = useState(false);
   const [groupByGenre, setGroupByGenre] = useState(false);
   const [groupLoading, setGroupLoading] = useState(false);
+  /** Prévia da busca — toca sem adicionar à playlist. */
+  const [previewTrack, setPreviewTrack] = useState<PlaylistTrackView | null>(
+    null,
+  );
   /** Ordem visual local (só no cliente). null = ordem original do servidor. */
   const [shuffledIds, setShuffledIds] = useState<string[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
 
   const locked = collab.locked;
   const originalTracks = collab.tracks;
+  const playlistIds = useMemo(
+    () => originalTracks.map((track) => track.id),
+    [originalTracks],
+  );
   const tracks = useMemo(() => {
     if (shuffle) return orderTracks(originalTracks, shuffledIds);
     if (groupByGenre) return flattenGenreGroups(originalTracks);
@@ -67,8 +93,11 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   }, [shuffle, shuffledIds, groupByGenre, originalTracks]);
   const safeIndex =
     tracks.length === 0 ? 0 : Math.min(currentIndex, tracks.length - 1);
-  const canGoPrev = safeIndex > 0;
-  const canGoNext = tracks.length > 0 && safeIndex < tracks.length - 1;
+  const canGoPrev = !previewTrack && safeIndex > 0;
+  const canGoNext =
+    !previewTrack && tracks.length > 0 && safeIndex < tracks.length - 1;
+  const playerTracks = previewTrack ? [previewTrack] : tracks;
+  const playerIndex = previewTrack ? 0 : safeIndex;
 
   function restoreIndexForTrack(
     currentId: string | undefined,
@@ -84,6 +113,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
 
   function handleToggleShuffle() {
     if (originalTracks.length === 0) return;
+    setPreviewTrack(null);
 
     if (shuffle) {
       const currentId = tracks[safeIndex]?.id;
@@ -104,7 +134,8 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   async function handleToggleGroup() {
     if (originalTracks.length === 0 || groupLoading) return;
 
-    const currentId = tracks[safeIndex]?.id;
+    const currentId = previewTrack?.id ?? tracks[safeIndex]?.id;
+    setPreviewTrack(null);
 
     if (groupByGenre) {
       setGroupByGenre(false);
@@ -154,6 +185,10 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   }
 
   const playNext = useCallback(() => {
+    if (previewTrack) {
+      setShouldPlay(false);
+      return;
+    }
     if (tracks.length === 0) return;
     if (safeIndex < tracks.length - 1) {
       setCurrentIndex(safeIndex + 1);
@@ -161,15 +196,16 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     } else {
       setShouldPlay(false);
     }
-  }, [safeIndex, tracks.length]);
+  }, [previewTrack, safeIndex, tracks.length]);
 
   const playPrev = useCallback(() => {
+    if (previewTrack) return;
     if (tracks.length === 0) return;
     if (safeIndex > 0) {
       setCurrentIndex(safeIndex - 1);
       setShouldPlay(true);
     }
-  }, [safeIndex, tracks.length]);
+  }, [previewTrack, safeIndex, tracks.length]);
 
   async function handleShare() {
     const url =
@@ -208,6 +244,11 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   }
 
   async function handleAdd(track: SearchResult) {
+    if (originalTracks.some((t) => t.id === track.id)) {
+      pushToast("Essa faixa já está na collab.", "info");
+      return;
+    }
+
     const res = await fetch(`/api/collabs/${collab.id}/tracks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -222,6 +263,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     const data = (await res.json()) as { collab: CollabDetail };
     const wasEmpty = originalTracks.length === 0;
     setCollab(data.collab);
+    setPreviewTrack(null);
 
     if (wasEmpty) {
       setCurrentIndex(0);
@@ -238,6 +280,18 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     }
 
     pushToast(`Adicionada: ${track.title}`, "success");
+  }
+
+  function handlePreview(track: SearchResult) {
+    const existingIndex = tracks.findIndex((t) => t.id === track.id);
+    if (existingIndex >= 0) {
+      setPreviewTrack(null);
+      setCurrentIndex(existingIndex);
+      setShouldPlay(true);
+      return;
+    }
+    setPreviewTrack(toPreviewTrack(track));
+    setShouldPlay(true);
   }
 
   async function handleChangeGenre(id: string, genre: MusicGenre) {
@@ -354,18 +408,25 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
   function handleSelect(id: string) {
     const index = tracks.findIndex((t) => t.id === id);
     if (index < 0) return;
+    setPreviewTrack(null);
     setCurrentIndex(index);
     setShouldPlay(true);
   }
 
   function handlePlaylistPlay() {
+    if (previewTrack) {
+      setShouldPlay((value) => !value);
+      return;
+    }
     if (tracks.length === 0) return;
     setShouldPlay((value) => !value);
   }
 
+  const hasPlayer = !locked && (tracks.length > 0 || Boolean(previewTrack));
+
   return (
     <div
-      className={`${styles.shell} ${tracks.length === 0 || locked ? styles.shellNoPlayer : ""}`}
+      className={`${styles.shell} ${!hasPlayer ? styles.shellNoPlayer : ""}`}
     >
       <div className={styles.atmosphere} aria-hidden />
 
@@ -439,7 +500,11 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
 
               {!locked && !collab.needsProfile && (
                 <div className={styles.search}>
-                  <SearchBox onAdd={handleAdd} />
+                  <SearchBox
+                    onAdd={handleAdd}
+                    onPreview={handlePreview}
+                    playlistIds={playlistIds}
+                  />
                 </div>
               )}
             </header>
@@ -448,7 +513,11 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
               <div className={styles.body}>
                 <Playlist
                   tracks={tracks}
-                  currentId={tracks[safeIndex]?.id ?? null}
+                  currentId={
+                    previewTrack
+                      ? previewTrack.id
+                      : (tracks[safeIndex]?.id ?? null)
+                  }
                   isPlaying={shouldPlay}
                   shuffle={shuffle}
                   groupByGenre={groupByGenre}
@@ -467,11 +536,11 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
             )}
           </div>
 
-          {!locked && tracks.length > 0 && (
+          {hasPlayer && (
             <aside className={styles.stage} aria-label="Área do player">
               <Player
-                tracks={tracks}
-                currentIndex={safeIndex}
+                tracks={playerTracks}
+                currentIndex={playerIndex}
                 shouldPlay={shouldPlay}
                 shuffle={shuffle}
                 groupByGenre={groupByGenre}

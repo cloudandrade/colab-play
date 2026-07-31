@@ -400,7 +400,7 @@ export default function Playlist({
           : groupByGenre
             ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · agrupadas por estilo (só nesta tela)`
             : isOwner
-              ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · você é o dono (remoção direta)`
+              ? `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · você é o dono`
               : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · remoção por ${removalVotesRequired} votos`;
 
   const groupedSections = useMemo(() => {

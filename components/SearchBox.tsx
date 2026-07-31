@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { artworkProxyPath } from "@/lib/artwork";
 import type { SearchResult } from "@/lib/types";
 import styles from "./SearchBox.module.css";
 
 interface SearchBoxProps {
   onAdd: (track: SearchResult) => Promise<void> | void;
+  /** Clique na faixa: só ouve (não adiciona). */
+  onPreview: (track: SearchResult) => void;
+  /** IDs já presentes na playlist da collab. */
+  playlistIds?: string[];
   disabled?: boolean;
 }
 
@@ -17,7 +21,12 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function SearchBox({ onAdd, disabled }: SearchBoxProps) {
+export default function SearchBox({
+  onAdd,
+  onPreview,
+  playlistIds = [],
+  disabled,
+}: SearchBoxProps) {
   const listId = useId();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -28,6 +37,8 @@ export default function SearchBox({ onAdd, disabled }: SearchBoxProps) {
   const [, startTransition] = useTransition();
   const wrapRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const inPlaylist = useMemo(() => new Set(playlistIds), [playlistIds]);
 
   const trimmed = query.trim();
   const canSearch = trimmed.length >= 2;
@@ -83,6 +94,7 @@ export default function SearchBox({ onAdd, disabled }: SearchBoxProps) {
   }, [canSearch, trimmed]);
 
   async function handleAdd(track: SearchResult) {
+    if (inPlaylist.has(track.id)) return;
     setAddingId(track.id);
     try {
       await onAdd(track);
@@ -134,41 +146,70 @@ export default function SearchBox({ onAdd, disabled }: SearchBoxProps) {
 
       {open && visibleResults.length > 0 && (
         <ul id={listId} className={styles.list} role="listbox">
-          {visibleResults.map((track) => (
-            <li key={track.id} role="option" aria-selected={false}>
-              <button
-                type="button"
-                className={styles.item}
-                disabled={addingId === track.id}
-                onClick={() => handleAdd(track)}
+          {visibleResults.map((track) => {
+            const alreadyIn = inPlaylist.has(track.id);
+            const adding = addingId === track.id;
+
+            return (
+              <li
+                key={track.id}
+                className={`${styles.row} ${alreadyIn ? styles.rowInPlaylist : ""}`}
+                role="option"
+                aria-selected={false}
               >
-                {track.source === "youtube" || track.artworkUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={
-                      track.source === "youtube"
-                        ? artworkProxyPath(track.id)
-                        : (track.artworkUrl as string)
-                    }
-                    alt=""
-                    className={styles.art}
-                    width={44}
-                    height={44}
-                  />
-                ) : (
-                  <span className={styles.artFallback} aria-hidden />
-                )}
-                <span className={styles.meta}>
-                  <span className={styles.title}>{track.title}</span>
-                  <span className={styles.artist}>{track.artist}</span>
-                </span>
-                <span className={styles.duration}>{formatDuration(track.duration)}</span>
-                <span className={styles.add}>
-                  {addingId === track.id ? "…" : "+"}
-                </span>
-              </button>
-            </li>
-          ))}
+                <button
+                  type="button"
+                  className={styles.item}
+                  onClick={() => onPreview(track)}
+                  aria-label={`Ouvir ${track.title}`}
+                  title="Clique para ouvir"
+                >
+                  {track.source === "youtube" || track.artworkUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={
+                        track.source === "youtube"
+                          ? artworkProxyPath(track.id)
+                          : (track.artworkUrl as string)
+                      }
+                      alt=""
+                      className={styles.art}
+                      width={44}
+                      height={44}
+                    />
+                  ) : (
+                    <span className={styles.artFallback} aria-hidden />
+                  )}
+                  <span className={styles.meta}>
+                    <span className={styles.title}>{track.title}</span>
+                    <span className={styles.artist}>{track.artist}</span>
+                    {alreadyIn && (
+                      <span className={styles.badge}>já nessa collab</span>
+                    )}
+                  </span>
+                  <span className={styles.duration}>
+                    {formatDuration(track.duration)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.addBtn} ${alreadyIn ? styles.addBtnDone : ""}`}
+                  onClick={() => void handleAdd(track)}
+                  disabled={disabled || adding || alreadyIn}
+                  aria-label={
+                    alreadyIn
+                      ? `${track.title} já está na collab`
+                      : `Adicionar ${track.title}`
+                  }
+                  title={
+                    alreadyIn ? "Já está nessa collab" : "Adicionar à collab"
+                  }
+                >
+                  {adding ? "…" : alreadyIn ? "✓" : "+"}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 
