@@ -7,11 +7,17 @@ import styles from "./NavigationProgress.module.css";
 export default function NavigationProgress() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const routeKey = `${pathname}?${searchParams.toString()}`;
   const [loading, setLoading] = useState(false);
+  const [seenRoute, setSeenRoute] = useState(routeKey);
 
-  useEffect(() => {
-    setLoading(false);
-  }, [pathname, searchParams]);
+  // Ao mudar de rota, encerra o loading (ajuste de estado durante o render).
+  if (seenRoute !== routeKey) {
+    setSeenRoute(routeKey);
+    if (loading) {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const start = () => setLoading(true);

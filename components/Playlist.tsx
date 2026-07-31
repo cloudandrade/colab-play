@@ -51,20 +51,14 @@ function TrackArt({
   title: string;
   source: PlaylistTrackView["source"];
 }) {
-  const imgRef = useRef<HTMLImageElement>(null);
+  const src = source === "youtube" ? artworkProxyPath(trackId) : null;
+  // Remonta o estado da imagem quando o src muda (evita setState-in-effect).
+  return <TrackArtImage key={src ?? "none"} src={src} title={title} />;
+}
+
+function TrackArtImage({ src, title }: { src: string | null; title: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const src =
-    source === "youtube" ? artworkProxyPath(trackId) : null;
-
-  useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
-    const img = imgRef.current;
-    if (img?.complete && img.naturalWidth > 0) {
-      setLoaded(true);
-    }
-  }, [src]);
 
   if (!src || failed) {
     return <span className={styles.artFallback} aria-hidden />;
@@ -75,7 +69,6 @@ function TrackArt({
       {!loaded && <span className={styles.artSkeleton} aria-hidden />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        ref={imgRef}
         src={src}
         alt=""
         className={`${styles.art} ${loaded ? styles.artVisible : styles.artHidden}`}
@@ -139,12 +132,11 @@ function TrackRow({
   const authorBtnRef = useRef<HTMLButtonElement>(null);
   const authorListRef = useRef<HTMLUListElement>(null);
 
-  useEffect(() => {
-    if (!showGenreEdit && menuOpen) {
-      setMenuOpen(false);
-      setMenuPos(null);
-    }
-  }, [showGenreEdit, menuOpen]);
+  // Fecha o menu de gênero quando o Group desliga (ajuste durante o render).
+  if (!showGenreEdit && menuOpen) {
+    setMenuOpen(false);
+    setMenuPos(null);
+  }
 
   function placeNearButton(
     btn: HTMLButtonElement | null,
@@ -378,7 +370,7 @@ function TrackRow({
                   style={{ top: authorPos.top, left: authorPos.left }}
                 >
                   {members.map((member) => (
-                    <li key={member.id} role="option">
+                    <li key={member.id} role="option" aria-selected={false}>
                       <button
                         type="button"
                         className={styles.authorOption}
@@ -544,19 +536,19 @@ export default function Playlist({
               : `${tracks.length} faixa${tracks.length === 1 ? "" : "s"} · remoção por ${removalVotesRequired} votos`;
 
   const groupedSections = useMemo(() => {
-    let offset = 0;
-    return genreGroups.map((group) => {
-      const startIndex = offset;
-      offset += group.tracks.length;
-      return { ...group, startIndex };
-    });
+    return genreGroups.reduce<
+      Array<(typeof genreGroups)[number] & { startIndex: number }>
+    >((sections, group) => {
+      const startIndex = sections.reduce(
+        (sum, section) => sum + section.tracks.length,
+        0,
+      );
+      return [...sections, { ...group, startIndex }];
+    }, []);
   }, [genreGroups]);
 
   const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    if (!groupByGenre) setClosedGroups({});
-  }, [groupByGenre]);
+  const activeClosedGroups = groupByGenre ? closedGroups : {};
 
   return (
     <section className={styles.section} aria-labelledby="playlist-heading">
@@ -675,7 +667,7 @@ export default function Playlist({
             <details
               key={group.genre}
               className={styles.group}
-              open={!closedGroups[group.genre]}
+              open={!activeClosedGroups[group.genre]}
               onToggle={(event) => {
                 const isOpen = event.currentTarget.open;
                 setClosedGroups((prev) => ({

@@ -200,9 +200,9 @@ export function useMiniPlayer({
   onVolumeChange,
   onToggleMute,
 }: UseMiniPlayerOptions) {
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(isMiniPlayerEnabled);
   const [pipOpen, setPipOpen] = useState(false);
-  const [supported, setSupported] = useState(false);
+  const [supported] = useState(supportsDocumentPip);
 
   const pipWindowRef = useRef<Window | null>(null);
   const currentRef = useRef(current);
@@ -217,11 +217,6 @@ export function useMiniPlayer({
   const onVolumeChangeRef = useRef(onVolumeChange);
   const onToggleMuteRef = useRef(onToggleMute);
   const openingRef = useRef(false);
-
-  useEffect(() => {
-    setEnabled(isMiniPlayerEnabled());
-    setSupported(supportsDocumentPip());
-  }, []);
 
   useEffect(() => {
     currentRef.current = current;
