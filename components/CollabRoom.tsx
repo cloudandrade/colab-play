@@ -321,6 +321,32 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
     pushToast(`Categoria alterada para ${genre}.`, "success");
   }
 
+  async function handleAssignAuthor(trackId: string, memberId: string) {
+    const res = await fetch(`/api/collabs/${collab.id}/tracks/author`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackId, memberId }),
+    });
+    const data = (await res.json()) as {
+      collab?: CollabDetail;
+      error?: string;
+    };
+
+    if (!res.ok || !data.collab) {
+      pushToast(data.error || "Não foi possível atribuir o autor.", "error");
+      throw new Error(data.error || "assign_author_failed");
+    }
+
+    setCollab(data.collab);
+    const member = data.collab.members.find((item) => item.id === memberId);
+    pushToast(
+      member
+        ? `Autor definido: ${member.name}.`
+        : "Autor da faixa atualizado.",
+      "success",
+    );
+  }
+
   async function handleRemove(id: string) {
     const res = await fetch(
       `/api/collabs/${collab.id}/tracks?trackId=${encodeURIComponent(id)}`,
@@ -524,6 +550,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   groupByGenre={groupByGenre}
                   groupLoading={groupLoading}
                   showContributors={!collab.isOpen}
+                  members={collab.members ?? []}
                   isOwner={collab.isOwner}
                   removalVotesRequired={collab.removalVotesRequired}
                   onToggleShuffle={handleToggleShuffle}
@@ -531,6 +558,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   onSelect={handleSelect}
                   onRemove={handleRemove}
                   onChangeGenre={handleChangeGenre}
+                  onAssignAuthor={handleAssignAuthor}
                   onPlay={handlePlaylistPlay}
                 />
               </div>

@@ -11,7 +11,7 @@ import {
   trackGenreOf,
   type MusicGenre,
 } from "@/lib/genre";
-import type { PlaylistTrackView } from "@/lib/types";
+import type { MemberProfilePublic, PlaylistTrackView } from "@/lib/types";
 import styles from "./Playlist.module.css";
 
 interface PlaylistProps {
@@ -23,6 +23,7 @@ interface PlaylistProps {
   groupLoading: boolean;
   /** Collabs privadas: mostra figurinha de quem adicionou. */
   showContributors: boolean;
+  members: MemberProfilePublic[];
   isOwner: boolean;
   removalVotesRequired: number;
   onToggleShuffle: () => void;
@@ -30,6 +31,7 @@ interface PlaylistProps {
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onChangeGenre: (id: string, genre: MusicGenre) => Promise<void>;
+  onAssignAuthor: (trackId: string, memberId: string) => Promise<void>;
   onPlay: () => void;
 }
 
@@ -97,31 +99,45 @@ function TrackRow({
   currentId,
   showContributors,
   showGenreEdit,
+  members,
   removalVotesRequired,
   onSelect,
   onRemove,
   onChangeGenre,
+  onAssignAuthor,
 }: {
   track: PlaylistTrackView;
   index: number;
   currentId: string | null;
   showContributors: boolean;
   showGenreEdit: boolean;
+  members: MemberProfilePublic[];
   removalVotesRequired: number;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onChangeGenre: (id: string, genre: MusicGenre) => Promise<void>;
+  onAssignAuthor: (trackId: string, memberId: string) => Promise<void>;
 }) {
   const active = track.id === currentId;
   const votes = track.removalVoteCount;
   const currentGenre = trackGenreOf(track);
+  const hasAuthor =
+    Boolean(track.addedByAvatar) && isAvatarId(track.addedByAvatar ?? "");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [authorOpen, setAuthorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
     null,
   );
+  const [authorPos, setAuthorPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuListRef = useRef<HTMLUListElement>(null);
+  const authorBtnRef = useRef<HTMLButtonElement>(null);
+  const authorListRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!showGenreEdit && menuOpen) {
@@ -130,11 +146,32 @@ function TrackRow({
     }
   }, [showGenreEdit, menuOpen]);
 
+  function placeNearButton(
+    btn: HTMLButtonElement | null,
+    menuWidth = 180,
+    menuMaxH = 256,
+  ) {
+    if (!btn) return null;
+    const rect = btn.getBoundingClientRect();
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    let top = rect.bottom + 4;
+    if (spaceBelow < Math.min(menuMaxH, 200) && spaceAbove > spaceBelow) {
+      top = Math.max(8, rect.top - Math.min(menuMaxH, spaceAbove) - 4);
+    }
+    return { top, left };
+  }
+
   useEffect(() => {
     if (!menuOpen) return;
 
     function placeMenu() {
-      setMenuPos(computeMenuPos());
+      setMenuPos(placeNearButton(btnRef.current, 160));
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -168,6 +205,44 @@ function TrackRow({
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!authorOpen) return;
+
+    function placeMenu() {
+      setAuthorPos(placeNearButton(authorBtnRef.current, 200));
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (
+        authorBtnRef.current?.contains(target) ||
+        authorListRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setAuthorOpen(false);
+      setAuthorPos(null);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAuthorOpen(false);
+        setAuthorPos(null);
+      }
+    }
+
+    window.addEventListener("resize", placeMenu);
+    window.addEventListener("scroll", placeMenu, true);
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("resize", placeMenu);
+      window.removeEventListener("scroll", placeMenu, true);
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [authorOpen]);
+
   const canRemoveDirectly = track.canRemoveDirectly;
   const voteLabel = canRemoveDirectly
     ? "Remover (sua faixa ou dono da collab)"
@@ -177,34 +252,28 @@ function TrackRow({
         ? `Votar remoção ${votes}/${removalVotesRequired}`
         : `Pedir remoção (0/${removalVotesRequired})`;
 
-  function computeMenuPos() {
-    const btn = btnRef.current;
-    if (!btn) return null;
-    const rect = btn.getBoundingClientRect();
-    const menuWidth = 160;
-    const menuMaxH = 256;
-    let left = rect.right - menuWidth;
-    if (left < 8) left = 8;
-    if (left + menuWidth > window.innerWidth - 8) {
-      left = window.innerWidth - menuWidth - 8;
-    }
-    const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const spaceAbove = rect.top - 8;
-    let top = rect.bottom + 4;
-    if (spaceBelow < Math.min(menuMaxH, 200) && spaceAbove > spaceBelow) {
-      top = Math.max(8, rect.top - Math.min(menuMaxH, spaceAbove) - 4);
-    }
-    return { top, left };
-  }
-
   function toggleMenu() {
     if (menuOpen) {
       setMenuOpen(false);
       setMenuPos(null);
       return;
     }
-    setMenuPos(computeMenuPos());
+    setAuthorOpen(false);
+    setAuthorPos(null);
+    setMenuPos(placeNearButton(btnRef.current, 160));
     setMenuOpen(true);
+  }
+
+  function toggleAuthorMenu() {
+    if (authorOpen) {
+      setAuthorOpen(false);
+      setAuthorPos(null);
+      return;
+    }
+    setMenuOpen(false);
+    setMenuPos(null);
+    setAuthorPos(placeNearButton(authorBtnRef.current, 200));
+    setAuthorOpen(true);
   }
 
   async function pickGenre(genre: MusicGenre) {
@@ -218,6 +287,18 @@ function TrackRow({
       setMenuOpen(false);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function pickAuthor(memberId: string) {
+    if (assigning) return;
+    setAssigning(true);
+    try {
+      await onAssignAuthor(track.id, memberId);
+      setAuthorOpen(false);
+      setAuthorPos(null);
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -243,33 +324,91 @@ function TrackRow({
             {track.genre && isMusicGenre(track.genre) ? ` · ${track.genre}` : ""}
           </span>
         </span>
-        <span className={styles.tail}>
-          {showContributors &&
-            track.addedByAvatar &&
-            isAvatarId(track.addedByAvatar) && (
-              <span
-                className={styles.contributor}
-                title={track.addedBy || "Quem adicionou"}
-                aria-label={
-                  track.addedBy
-                    ? `Adicionada por ${track.addedBy}`
-                    : "Quem adicionou"
-                }
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarSrc(track.addedByAvatar)}
-                  alt=""
-                  width={28}
-                  height={28}
-                />
-              </span>
-            )}
-          <span className={styles.duration}>
-            {formatDuration(track.duration)}
-          </span>
-        </span>
       </button>
+
+      <div className={styles.tail}>
+        {showContributors && hasAuthor && (
+          <span
+            className={styles.contributor}
+            title={track.addedBy || "Quem adicionou"}
+            aria-label={
+              track.addedBy
+                ? `Adicionada por ${track.addedBy}`
+                : "Quem adicionou"
+            }
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={avatarSrc(track.addedByAvatar as string)}
+              alt=""
+              width={28}
+              height={28}
+            />
+          </span>
+        )}
+        {showContributors && !hasAuthor && (
+          <>
+            <button
+              ref={authorBtnRef}
+              type="button"
+              className={`${styles.contributorUnknown} ${
+                authorOpen ? styles.contributorUnknownOpen : ""
+              }`}
+              onClick={toggleAuthorMenu}
+              disabled={assigning || members.length === 0}
+              aria-haspopup="listbox"
+              aria-expanded={authorOpen}
+              aria-label="Atribuir autor da faixa"
+              title={
+                members.length === 0
+                  ? "Nenhum membro na collab ainda"
+                  : "Atribuir autor"
+              }
+            >
+              ?
+            </button>
+            {authorOpen &&
+              authorPos &&
+              createPortal(
+                <ul
+                  ref={authorListRef}
+                  className={styles.authorMenu}
+                  role="listbox"
+                  aria-label="Escolher autor"
+                  style={{ top: authorPos.top, left: authorPos.left }}
+                >
+                  {members.map((member) => (
+                    <li key={member.id} role="option">
+                      <button
+                        type="button"
+                        className={styles.authorOption}
+                        onClick={() => void pickAuthor(member.id)}
+                        disabled={assigning}
+                      >
+                        {isAvatarId(member.avatarId) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={avatarSrc(member.avatarId)}
+                            alt=""
+                            width={28}
+                            height={28}
+                          />
+                        ) : (
+                          <span className={styles.authorFallback} aria-hidden />
+                        )}
+                        <span>{member.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>,
+                document.body,
+              )}
+          </>
+        )}
+        <span className={styles.duration}>
+          {formatDuration(track.duration)}
+        </span>
+      </div>
 
       <div className={styles.rowActions}>
         {showGenreEdit && (
@@ -375,6 +514,7 @@ export default function Playlist({
   groupByGenre,
   groupLoading,
   showContributors,
+  members,
   isOwner,
   removalVotesRequired,
   onToggleShuffle,
@@ -382,6 +522,7 @@ export default function Playlist({
   onSelect,
   onRemove,
   onChangeGenre,
+  onAssignAuthor,
   onPlay,
 }: PlaylistProps) {
   const genreGroups = useMemo(
@@ -517,10 +658,12 @@ export default function Playlist({
               currentId={currentId}
               showContributors={showContributors}
               showGenreEdit={false}
+              members={members}
               removalVotesRequired={removalVotesRequired}
               onSelect={onSelect}
               onRemove={onRemove}
               onChangeGenre={onChangeGenre}
+              onAssignAuthor={onAssignAuthor}
             />
           ))}
         </ol>
@@ -557,10 +700,12 @@ export default function Playlist({
                     currentId={currentId}
                     showContributors={showContributors}
                     showGenreEdit
+                    members={members}
                     removalVotesRequired={removalVotesRequired}
                     onSelect={onSelect}
                     onRemove={onRemove}
                     onChangeGenre={onChangeGenre}
+                    onAssignAuthor={onAssignAuthor}
                   />
                 ))}
               </ol>

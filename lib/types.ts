@@ -11,6 +11,8 @@ export interface CollabMember {
 }
 
 export interface MemberProfilePublic {
+  /** Id público do membro (não é o IP). */
+  id: string;
   name: string;
   avatarId: string;
 }
@@ -102,6 +104,8 @@ export interface CollabDetail {
   needsProfile: boolean;
   /** Perfil do visitante atual (se já escolheu). */
   myProfile: MemberProfilePublic | null;
+  /** Membros da collab privada (sem dados sensíveis). */
+  members: MemberProfilePublic[];
 }
 
 export interface CollabsStore {

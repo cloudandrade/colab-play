@@ -75,6 +75,22 @@ export function memberKeyFromIp(ip: string): string {
     .slice(0, 40);
 }
 
+/** Id público do membro (derivado do ipKey, seguro para o cliente). */
+export function publicMemberId(ipKey: string): string {
+  return createHash("sha256")
+    .update(`pub:${ipKey}:${getAccessSecret()}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+export function toPublicMember(member: CollabMember): MemberProfilePublic {
+  return {
+    id: publicMemberId(member.ipKey),
+    name: member.name,
+    avatarId: member.avatarId,
+  };
+}
+
 export function findMember(
   collab: Collab,
   clientIp?: string | null,
@@ -82,6 +98,15 @@ export function findMember(
   if (!clientIp) return null;
   const key = memberKeyFromIp(clientIp);
   return collab.members.find((m) => m.ipKey === key) ?? null;
+}
+
+export function findMemberByPublicId(
+  collab: Collab,
+  memberId: string,
+): CollabMember | null {
+  return (
+    collab.members.find((m) => publicMemberId(m.ipKey) === memberId) ?? null
+  );
 }
 
 function toCollab(doc: CollabRecord): Collab {
@@ -180,9 +205,13 @@ export function toDetail(
   );
   const member = locked ? null : findMember(collab, clientIp);
   const myProfile: MemberProfilePublic | null = member
-    ? { name: member.name, avatarId: member.avatarId }
+    ? toPublicMember(member)
     : null;
   const needsProfile = !collab.isOpen && !locked && !member;
+  const members: MemberProfilePublic[] =
+    !collab.isOpen && !locked
+      ? collab.members.map((item) => toPublicMember(item))
+      : [];
 
   const myIpKey = clientIp ? memberKeyFromIp(clientIp) : null;
 
@@ -224,6 +253,7 @@ export function toDetail(
     removalVotesRequired: REMOVAL_VOTES_REQUIRED,
     needsProfile,
     myProfile,
+    members,
     tracks,
   };
 }
@@ -385,6 +415,50 @@ export async function upsertMemberProfile(
         members,
         tracks,
         updatedAt: now,
+      },
+    },
+  );
+
+  return getCollab(collabId);
+}
+
+/**
+ * Atribui manualmente o autor de uma faixa (collab privada, faixas sem autor).
+ */
+export async function assignTrackAuthor(
+  collabId: string,
+  trackId: string,
+  memberId: string,
+): Promise<Collab | null> {
+  await connectDb();
+  const existing = await CollabModel.findOne({ id: collabId }).lean().exec();
+  if (!existing) return null;
+
+  const collab = toCollab(existing as CollabRecord);
+  if (collab.isOpen) throw new Error("COLLAB_PUBLICA");
+
+  const member = findMemberByPublicId(collab, memberId);
+  if (!member) throw new Error("MEMBRO_INVALIDO");
+
+  const track = collab.tracks.find((item) => item.id === trackId);
+  if (!track) throw new Error("FAIXA_NAO_ENCONTRADA");
+
+  const tracks = collab.tracks.map((item) => {
+    if (item.id !== trackId) return item;
+    return {
+      ...item,
+      addedBy: member.name,
+      addedByAvatar: member.avatarId,
+      addedByIp: member.ipKey,
+    };
+  });
+
+  await CollabModel.collection.updateOne(
+    { id: collabId },
+    {
+      $set: {
+        tracks,
+        updatedAt: new Date().toISOString(),
       },
     },
   );
