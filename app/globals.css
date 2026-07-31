@@ -32,7 +32,8 @@ html {
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
+  /* clip evita scroll horizontal sem quebrar position:sticky (overflow-x:hidden quebra) */
+  overflow-x: clip;
 }
 
 body {

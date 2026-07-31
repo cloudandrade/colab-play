@@ -377,7 +377,7 @@
   }
 }
 
-/* Desktop: painel lateral sticky com vídeo quadrado */
+/* Desktop: painel lateral (sticky vem do .stage) */
 @media (min-width: 1024px) {
   .panel {
     position: relative;

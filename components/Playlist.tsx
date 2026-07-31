@@ -96,6 +96,7 @@ function TrackRow({
   index,
   currentId,
   showContributors,
+  showGenreEdit,
   isOwner,
   removalVotesRequired,
   onSelect,
@@ -106,6 +107,7 @@ function TrackRow({
   index: number;
   currentId: string | null;
   showContributors: boolean;
+  showGenreEdit: boolean;
   isOwner: boolean;
   removalVotesRequired: number;
   onSelect: (id: string) => void;
@@ -122,6 +124,13 @@ function TrackRow({
   );
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuListRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (!showGenreEdit && menuOpen) {
+      setMenuOpen(false);
+      setMenuPos(null);
+    }
+  }, [showGenreEdit, menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -264,58 +273,60 @@ function TrackRow({
       </button>
 
       <div className={styles.rowActions}>
-        <div className={styles.genreWrap}>
-          <button
-            ref={btnRef}
-            type="button"
-            className={`${styles.genreBtn} ${menuOpen ? styles.genreBtnOpen : ""}`}
-            onClick={toggleMenu}
-            disabled={saving}
-            aria-haspopup="listbox"
-            aria-expanded={menuOpen}
-            aria-label={`Mudar categoria (atual: ${currentGenre})`}
-            title={`Categoria: ${currentGenre}`}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              aria-hidden
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
+        {showGenreEdit && (
+          <div className={styles.genreWrap}>
+            <button
+              ref={btnRef}
+              type="button"
+              className={`${styles.genreBtn} ${menuOpen ? styles.genreBtnOpen : ""}`}
+              onClick={toggleMenu}
+              disabled={saving}
+              aria-haspopup="listbox"
+              aria-expanded={menuOpen}
+              aria-label={`Mudar categoria (atual: ${currentGenre})`}
+              title={`Categoria: ${currentGenre}`}
             >
-              <path d="M4 7h7l2 2h7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" />
-            </svg>
-          </button>
-          {menuOpen &&
-            menuPos &&
-            createPortal(
-              <ul
-                ref={menuListRef}
-                className={styles.genreMenu}
-                role="listbox"
-                aria-label="Escolher categoria"
-                style={{ top: menuPos.top, left: menuPos.left }}
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                aria-hidden
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
               >
-                {MUSIC_GENRES.map((genre) => (
-                  <li key={genre} role="option" aria-selected={genre === currentGenre}>
-                    <button
-                      type="button"
-                      className={`${styles.genreOption} ${
-                        genre === currentGenre ? styles.genreOptionActive : ""
-                      }`}
-                      onClick={() => void pickGenre(genre)}
-                      disabled={saving}
-                    >
-                      {genre}
-                    </button>
-                  </li>
-                ))}
-              </ul>,
-              document.body,
-            )}
-        </div>
+                <path d="M4 7h7l2 2h7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" />
+              </svg>
+            </button>
+            {menuOpen &&
+              menuPos &&
+              createPortal(
+                <ul
+                  ref={menuListRef}
+                  className={styles.genreMenu}
+                  role="listbox"
+                  aria-label="Escolher categoria"
+                  style={{ top: menuPos.top, left: menuPos.left }}
+                >
+                  {MUSIC_GENRES.map((genre) => (
+                    <li key={genre} role="option" aria-selected={genre === currentGenre}>
+                      <button
+                        type="button"
+                        className={`${styles.genreOption} ${
+                          genre === currentGenre ? styles.genreOptionActive : ""
+                        }`}
+                        onClick={() => void pickGenre(genre)}
+                        disabled={saving}
+                      >
+                        {genre}
+                      </button>
+                    </li>
+                  ))}
+                </ul>,
+                document.body,
+              )}
+          </div>
+        )}
 
         <button
           type="button"
@@ -506,6 +517,7 @@ export default function Playlist({
               index={index}
               currentId={currentId}
               showContributors={showContributors}
+              showGenreEdit={false}
               isOwner={isOwner}
               removalVotesRequired={removalVotesRequired}
               onSelect={onSelect}
@@ -546,6 +558,7 @@ export default function Playlist({
                     index={group.startIndex + i}
                     currentId={currentId}
                     showContributors={showContributors}
+                    showGenreEdit
                     isOwner={isOwner}
                     removalVotesRequired={removalVotesRequired}
                     onSelect={onSelect}

@@ -419,7 +419,7 @@ export async function addTrackToCollab(
       {
         $push: { tracks: track },
         $set: { updatedAt: new Date().toISOString() },
-      },
+      } as Record<string, unknown>,
     );
   } else {
     await CollabModel.collection.updateOne(

@@ -157,8 +157,10 @@
 
   .stage {
     position: sticky;
-    top: 1.5rem;
+    top: 1.25rem;
     align-self: start;
+    z-index: 8;
+    max-height: calc(100vh - 2.5rem);
   }
 
   .hero {
