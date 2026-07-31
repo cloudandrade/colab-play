@@ -15,6 +15,8 @@ const trackSchema = new Schema(
     streamUrl: { type: String, required: true },
     addedAt: { type: String, required: true },
     addedBy: { type: String, required: false },
+    addedByAvatar: { type: String, default: null },
+    addedByIp: { type: String, default: null },
     genre: { type: String, default: null },
   },
   { _id: false },
@@ -24,6 +26,16 @@ const removalVoteSchema = new Schema(
   {
     trackId: { type: String, required: true },
     voterIps: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
+const memberSchema = new Schema(
+  {
+    ipKey: { type: String, required: true },
+    name: { type: String, required: true },
+    avatarId: { type: String, required: true },
+    createdAt: { type: String, required: true },
   },
   { _id: false },
 );
@@ -40,6 +52,7 @@ const collabSchema = new Schema(
     updatedAt: { type: String, required: true },
     tracks: { type: [trackSchema], default: [] },
     removalVotes: { type: [removalVoteSchema], default: [] },
+    members: { type: [memberSchema], default: [] },
   },
   {
     collection: "collabs",

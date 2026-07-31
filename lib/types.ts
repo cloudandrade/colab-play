@@ -2,6 +2,19 @@ export type TrackSource = "youtube" | "audius";
 
 export const REMOVAL_VOTES_REQUIRED = 2;
 
+export interface CollabMember {
+  /** Hash do IP — só no servidor. */
+  ipKey: string;
+  name: string;
+  avatarId: string;
+  createdAt: string;
+}
+
+export interface MemberProfilePublic {
+  name: string;
+  avatarId: string;
+}
+
 export interface PlaylistTrack {
   id: string;
   title: string;
@@ -11,8 +24,16 @@ export interface PlaylistTrack {
   source: TrackSource;
   streamUrl: string;
   addedAt: string;
+  /** Nome de quem adicionou (collabs privadas). */
   addedBy?: string;
-  /** Estilo resolvido (Deezer/iTunes/heurística). Metadado compartilhado; o agrupamento visual é só no cliente. */
+  /** Id da figurinha de quem adicionou. */
+  addedByAvatar?: string | null;
+  /**
+   * Hash do IP de quem adicionou — só no servidor.
+   * Usado para backfill quando o membro define o perfil.
+   */
+  addedByIp?: string | null;
+  /** Estilo resolvido (Deezer/iTunes/heurística). */
   genre?: string | null;
 }
 
@@ -49,6 +70,8 @@ export interface Collab {
   updatedAt: string;
   tracks: PlaylistTrack[];
   removalVotes: RemovalVote[];
+  /** Membros de collabs privadas (ipKey nunca vai ao cliente). */
+  members: CollabMember[];
 }
 
 export interface CollabPublic {
@@ -73,6 +96,10 @@ export interface CollabDetail {
   isOwner: boolean;
   /** Votes needed for non-owners to remove a track. */
   removalVotesRequired: number;
+  /** Privada desbloqueada sem perfil ainda — mostrar modal. */
+  needsProfile: boolean;
+  /** Perfil do visitante atual (se já escolheu). */
+  myProfile: MemberProfilePublic | null;
 }
 
 export interface CollabsStore {

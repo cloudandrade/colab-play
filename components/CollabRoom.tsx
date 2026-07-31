@@ -6,6 +6,7 @@ import SearchBox from "@/components/SearchBox";
 import Playlist from "@/components/Playlist";
 import Player from "@/components/Player";
 import UnlockModal from "@/components/UnlockModal";
+import ProfileModal from "@/components/ProfileModal";
 import DeleteCollabModal from "@/components/DeleteCollabModal";
 import { ToastViewport, useToasts } from "@/components/Toast";
 import { flattenGenreGroups, type MusicGenre } from "@/lib/genre";
@@ -436,7 +437,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                 Busque uma faixa, adicione à fila e ouça junto nesta collab.
               </p>
 
-              {!locked && (
+              {!locked && !collab.needsProfile && (
                 <div className={styles.search}>
                   <SearchBox onAdd={handleAdd} />
                 </div>
@@ -452,6 +453,7 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
                   shuffle={shuffle}
                   groupByGenre={groupByGenre}
                   groupLoading={groupLoading}
+                  showContributors={!collab.isOpen}
                   isOwner={collab.isOwner}
                   removalVotesRequired={collab.removalVotesRequired}
                   onToggleShuffle={handleToggleShuffle}
@@ -492,6 +494,17 @@ export default function CollabRoom({ initialCollab }: CollabRoomProps) {
           collabId={collab.id}
           collabName={collab.name}
           onUnlocked={reloadCollab}
+        />
+      )}
+
+      {!locked && collab.needsProfile && (
+        <ProfileModal
+          collabId={collab.id}
+          collabName={collab.name}
+          onSaved={(next) => {
+            setCollab(next);
+            pushToast(`Bem-vindo(a), ${next.myProfile?.name ?? "aí"}!`, "success");
+          }}
         />
       )}
 

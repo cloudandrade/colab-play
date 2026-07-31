@@ -4,8 +4,10 @@ import { resolveStoredArtworkUrl } from "@/lib/artwork";
 import {
   accessCookieName,
   addTrackToCollab,
+  findMember,
   getCollab,
   hasAccess,
+  memberKeyFromIp,
   removeTrackFromCollab,
   toDetail,
 } from "@/lib/collabs";
@@ -93,6 +95,26 @@ export async function POST(
       resolveStoredArtworkUrl(trackId, source, artworkRaw) ??
       (artworkRaw && isSafeHttpsUrl(artworkRaw) ? artworkRaw : null);
 
+    // Collabs privadas exigem perfil (nome + figurinha) antes de adicionar.
+    let addedBy: string | undefined;
+    let addedByAvatar: string | undefined;
+    let addedByIp: string | undefined;
+    if (!access.collab.isOpen) {
+      const member = findMember(access.collab, ip);
+      if (!member) {
+        return NextResponse.json(
+          {
+            error: "Escolha um nome e uma figurinha antes de adicionar faixas.",
+            needsProfile: true,
+          },
+          { status: 403 },
+        );
+      }
+      addedBy = member.name;
+      addedByAvatar = member.avatarId;
+      addedByIp = memberKeyFromIp(ip);
+    }
+
     const track: PlaylistTrack = {
       id: trackId,
       title,
@@ -105,9 +127,9 @@ export async function POST(
           ? `https://www.youtube.com/watch?v=${encodeURIComponent(trackId)}`
           : `/api/stream?id=${encodeURIComponent(trackId)}`,
       addedAt: new Date().toISOString(),
-      ...(body.addedBy
-        ? { addedBy: sanitizeText(body.addedBy, 40) }
-        : {}),
+      ...(addedBy ? { addedBy } : {}),
+      ...(addedByAvatar ? { addedByAvatar } : {}),
+      ...(addedByIp ? { addedByIp } : {}),
     };
 
     const updated = await addTrackToCollab(id, track);

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { artworkProxyPath } from "@/lib/artwork";
+import { avatarSrc, isAvatarId } from "@/lib/avatars";
 import {
   groupTracksByGenre,
   isMusicGenre,
@@ -20,6 +21,8 @@ interface PlaylistProps {
   shuffle: boolean;
   groupByGenre: boolean;
   groupLoading: boolean;
+  /** Collabs privadas: mostra figurinha de quem adicionou. */
+  showContributors: boolean;
   isOwner: boolean;
   removalVotesRequired: number;
   onToggleShuffle: () => void;
@@ -92,6 +95,7 @@ function TrackRow({
   track,
   index,
   currentId,
+  showContributors,
   isOwner,
   removalVotesRequired,
   onSelect,
@@ -101,6 +105,7 @@ function TrackRow({
   track: PlaylistTrackView;
   index: number;
   currentId: string | null;
+  showContributors: boolean;
   isOwner: boolean;
   removalVotesRequired: number;
   onSelect: (id: string) => void;
@@ -226,11 +231,36 @@ function TrackRow({
           <span className={styles.title}>{track.title}</span>
           <span className={styles.artist}>
             {track.artist}
-            {track.addedBy ? ` · ${track.addedBy}` : ""}
+            {!showContributors && track.addedBy ? ` · ${track.addedBy}` : ""}
             {track.genre && isMusicGenre(track.genre) ? ` · ${track.genre}` : ""}
           </span>
         </span>
-        <span className={styles.duration}>{formatDuration(track.duration)}</span>
+        <span className={styles.tail}>
+          {showContributors &&
+            track.addedByAvatar &&
+            isAvatarId(track.addedByAvatar) && (
+              <span
+                className={styles.contributor}
+                title={track.addedBy || "Quem adicionou"}
+                aria-label={
+                  track.addedBy
+                    ? `Adicionada por ${track.addedBy}`
+                    : "Quem adicionou"
+                }
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={avatarSrc(track.addedByAvatar)}
+                  alt=""
+                  width={28}
+                  height={28}
+                />
+              </span>
+            )}
+          <span className={styles.duration}>
+            {formatDuration(track.duration)}
+          </span>
+        </span>
       </button>
 
       <div className={styles.rowActions}>
@@ -334,6 +364,7 @@ export default function Playlist({
   shuffle,
   groupByGenre,
   groupLoading,
+  showContributors,
   isOwner,
   removalVotesRequired,
   onToggleShuffle,
@@ -474,6 +505,7 @@ export default function Playlist({
               track={track}
               index={index}
               currentId={currentId}
+              showContributors={showContributors}
               isOwner={isOwner}
               removalVotesRequired={removalVotesRequired}
               onSelect={onSelect}
@@ -513,6 +545,7 @@ export default function Playlist({
                     track={track}
                     index={group.startIndex + i}
                     currentId={currentId}
+                    showContributors={showContributors}
                     isOwner={isOwner}
                     removalVotesRequired={removalVotesRequired}
                     onSelect={onSelect}

@@ -6,15 +6,18 @@ import { CollabModel } from "@/lib/models/Collab";
 import type {
   Collab,
   CollabDetail,
+  CollabMember,
   CollabPublic,
   CreateCollabResult,
   DeleteCollabResult,
+  MemberProfilePublic,
   PlaylistTrack,
   PlaylistTrackView,
   RemovalVote,
   RemoveTrackResult,
 } from "@/lib/types";
 import { REMOVAL_VOTES_REQUIRED } from "@/lib/types";
+import { isAvatarId } from "@/lib/avatars";
 
 function getAccessSecret(): string {
   const secret = process.env.COLLAB_ACCESS_SECRET?.trim();
@@ -26,6 +29,7 @@ function getAccessSecret(): string {
 }
 
 export const MAX_TRACKS_PER_COLLAB = 200;
+export const MAX_MEMBER_NAME = 24;
 export { REMOVAL_VOTES_REQUIRED };
 
 type CollabRecord = {
@@ -47,13 +51,38 @@ type CollabRecord = {
     streamUrl: string;
     addedAt: string;
     addedBy?: string | null;
+    addedByAvatar?: string | null;
+    addedByIp?: string | null;
     genre?: string | null;
   }>;
   removalVotes?: Array<{
     trackId: string;
     voterIps?: string[];
   }>;
+  members?: Array<{
+    ipKey: string;
+    name: string;
+    avatarId: string;
+    createdAt: string;
+  }>;
 };
+
+/** Chave estável do membro (hash do IP) — nunca enviada ao cliente. */
+export function memberKeyFromIp(ip: string): string {
+  return createHash("sha256")
+    .update(`member:${normalizeIp(ip)}:${getAccessSecret()}`)
+    .digest("hex")
+    .slice(0, 40);
+}
+
+export function findMember(
+  collab: Collab,
+  clientIp?: string | null,
+): CollabMember | null {
+  if (!clientIp) return null;
+  const key = memberKeyFromIp(clientIp);
+  return collab.members.find((m) => m.ipKey === key) ?? null;
+}
 
 function toCollab(doc: CollabRecord): Collab {
   return {
@@ -81,12 +110,20 @@ function toCollab(doc: CollabRecord): Collab {
         streamUrl: track.streamUrl,
         addedAt: track.addedAt,
         ...(track.addedBy ? { addedBy: track.addedBy } : {}),
+        ...(track.addedByAvatar ? { addedByAvatar: track.addedByAvatar } : {}),
+        ...(track.addedByIp ? { addedByIp: track.addedByIp } : {}),
         ...(track.genre ? { genre: track.genre } : {}),
       };
     }),
     removalVotes: (doc.removalVotes ?? []).map((vote) => ({
       trackId: vote.trackId,
       voterIps: [...(vote.voterIps ?? [])],
+    })),
+    members: (doc.members ?? []).map((member) => ({
+      ipKey: member.ipKey,
+      name: member.name,
+      avatarId: member.avatarId,
+      createdAt: member.createdAt,
     })),
   };
 }
@@ -141,13 +178,28 @@ export function toDetail(
   const voteMap = new Map(
     (collab.removalVotes ?? []).map((vote) => [vote.trackId, vote.voterIps]),
   );
+  const member = locked ? null : findMember(collab, clientIp);
+  const myProfile: MemberProfilePublic | null = member
+    ? { name: member.name, avatarId: member.avatarId }
+    : null;
+  const needsProfile = !collab.isOpen && !locked && !member;
 
   const tracks: PlaylistTrackView[] = locked
     ? []
     : collab.tracks.map((track) => {
         const voters = voteMap.get(track.id) ?? [];
         return {
-          ...track,
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl,
+          duration: track.duration,
+          source: track.source,
+          streamUrl: track.streamUrl,
+          addedAt: track.addedAt,
+          ...(track.addedBy ? { addedBy: track.addedBy } : {}),
+          ...(track.addedByAvatar ? { addedByAvatar: track.addedByAvatar } : {}),
+          ...(track.genre ? { genre: track.genre } : {}),
           removalVoteCount: voters.length,
           hasVoted: clientIp
             ? voters.some((ip) => sameIp(ip, clientIp))
@@ -164,6 +216,8 @@ export function toDetail(
     locked,
     isOwner,
     removalVotesRequired: REMOVAL_VOTES_REQUIRED,
+    needsProfile,
+    myProfile,
     tracks,
   };
 }
@@ -266,10 +320,70 @@ export async function createCollab(input: {
     updatedAt: now,
     tracks: [],
     removalVotes: [],
+    members: [],
   };
 
   await CollabModel.create(collab);
   return { collab: toPublic(collab), adminCode };
+}
+
+/**
+ * Define/atualiza o perfil do visitante numa collab privada e
+ * faz backfill nas faixas já adicionadas por esse IP (quando houver addedByIp).
+ */
+export async function upsertMemberProfile(
+  collabId: string,
+  clientIp: string,
+  input: { name: string; avatarId: string },
+): Promise<Collab | null> {
+  const name = input.name.trim().slice(0, MAX_MEMBER_NAME);
+  if (!name) throw new Error("NOME_OBRIGATORIO");
+  if (!isAvatarId(input.avatarId)) throw new Error("AVATAR_INVALIDO");
+
+  await connectDb();
+  const existing = await CollabModel.findOne({ id: collabId }).lean().exec();
+  if (!existing) return null;
+
+  const collab = toCollab(existing as CollabRecord);
+  if (collab.isOpen) throw new Error("COLLAB_PUBLICA");
+
+  const ipKey = memberKeyFromIp(clientIp);
+  const now = new Date().toISOString();
+  const nextMember: CollabMember = {
+    ipKey,
+    name,
+    avatarId: input.avatarId,
+    createdAt:
+      collab.members.find((m) => m.ipKey === ipKey)?.createdAt ?? now,
+  };
+
+  const members = [
+    ...collab.members.filter((m) => m.ipKey !== ipKey),
+    nextMember,
+  ];
+
+  const tracks = collab.tracks.map((track) => {
+    if (track.addedByIp !== ipKey) return track;
+    return {
+      ...track,
+      addedBy: name,
+      addedByAvatar: input.avatarId,
+    };
+  });
+
+  // collection.updateOne evita strip de campos novos se o schema estiver cacheado no HMR
+  await CollabModel.collection.updateOne(
+    { id: collabId },
+    {
+      $set: {
+        members,
+        tracks,
+        updatedAt: now,
+      },
+    },
+  );
+
+  return getCollab(collabId);
 }
 
 export async function unlockCollab(
@@ -300,18 +414,18 @@ export async function addTrackToCollab(
   }
 
   if (!alreadyThere) {
-    await CollabModel.updateOne(
+    await CollabModel.collection.updateOne(
       { id: collabId },
       {
         $push: { tracks: track },
         $set: { updatedAt: new Date().toISOString() },
       },
-    ).exec();
+    );
   } else {
-    await CollabModel.updateOne(
+    await CollabModel.collection.updateOne(
       { id: collabId },
       { $set: { updatedAt: new Date().toISOString() } },
-    ).exec();
+    );
   }
 
   return getCollab(collabId);
